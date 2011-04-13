@@ -4,6 +4,8 @@
 ;; * show icon in tab if private TL.
 ;; * manipulate by mouse.
 
+(require 'twittering-mode)
+
 (defvar twittering+tab-width 20)
 
 (defface twittering+tab-unselected
