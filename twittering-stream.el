@@ -31,25 +31,30 @@
 (require 'json)
 
 (defconst twittering-stream-user-url "https://userstream.twitter.com/2/user.json")
-(defconst twittering-stream-buffer-name " *Twittering stream*")
+(defconst twittering-stream-buffer-name " *Twittering Stream* ")
 
-(define-minor-mode twittering-stream-mode 
+(defvar twittering-stream-mode nil)
+(defun twittering-stream-mode (&optional arg)
+  (interactive "P")
   "Streaming API for Twitter"
-  :init-value nil
-  ::lighter nil
-  :keymap nil
   (let ((proc (get-buffer-process twittering-stream-buffer-name)))
     (cond
-     (twittering-stream-mode 
+     ((or (and (numberp arg) (minusp arg))
+          (and (null arg)
+               twittering-stream-mode))
+      (when proc
+        (delete-process proc))
+      (setq twittering-stream-mode nil)
+      (message "Twittering stream disabled."))
+     (t
       (unless (eq twittering-account-authorization 'authorized)
         (twittering-stream-mode -1)
         (error "Twittering-mode is not authorized"))
       (unless proc
         (twittering-stream--open 
-         twittering-stream-user-url)))
-     (t
-      (when proc
-        (delete-process proc))))))
+         twittering-stream-user-url))
+      (setq twittering-stream-mode t)
+      (message "Twittering stream enabled.")))))
 
 (defun twittering-stream--oauth-token (url)
   (let ((access-token
@@ -63,6 +68,7 @@
      twittering-oauth-consumer-key twittering-oauth-consumer-secret
      access-token access-token-secret)))
 
+;;TODO &optional arg
 (defun twittering-stream--open (uri)
   (let* ((connection-info (twittering-make-connection-info '()))
          (use-proxy (cdr (assq 'use-proxy connection-info)))
@@ -116,15 +122,16 @@
     (set-process-filter proc 'twittering-stream--wget-header-filter)))
 
 (defun twittering-stream--wget-header-filter (proc event)
-  (let ((buffer (process-buffer proc)))
-    (when (buffer-live-p buffer)
-      (with-current-buffer buffer
+  (let ((buf (process-buffer proc)))
+    (when (buffer-live-p buf)
+      (with-current-buffer buf
         (when (string-match "^HTTP/\\(?:[0-9.]+\\)[ \t]+\\([0-9]+\\)" event)
           (let ((code (string-to-number (match-string 1 event))))
             (cond
              ((= code 200)
               (let ((inhibit-read-only t))
                 (erase-buffer))
+              ;; replace the filter
               (set-process-filter proc 'twittering-stream--wget-filter)
               (process-put proc 'twittering-stream--error-count 0))
              (t
@@ -134,9 +141,10 @@
   'twittering-stream--default-handler)
 
 (defun twittering-stream--wget-filter (proc event)
-  (let ((buffer (process-buffer proc)))
-    (when (buffer-live-p buffer)
-      (with-current-buffer buffer
+  (let ((buf (process-buffer proc))
+        (cbuf (current-buffer)))
+    (when (buffer-live-p buf)
+      (with-current-buffer buf
         (save-excursion
           (let ((retry (process-get proc 'twittering-stream--error-count))
                 (inhibit-read-only t)
@@ -148,7 +156,9 @@
                 (while (setq json (json-read))
                   (delete-region (point-min) (point))
                   (process-put proc 'twittering-stream--error-count 0)
-                  (funcall twittering-stream-handler-function json))
+                  (with-current-buffer cbuf
+                    (save-excursion
+                      (funcall twittering-stream-handler-function json))))
               ;; ignore eob
               (end-of-file)
               (error
@@ -160,9 +170,31 @@
                               'twittering-stream--error-count
                               (1+ retry))))))))))))
 
+(defconst twittering-stream--replace-table
+  '(
+    ("&gt;" . ">")
+    ("&lt;" . "<")
+    ("&quot;" . "\"")
+    ("&amp;" . "&")
+    ))
+
+(defun twittering-stream--html2text (text)
+  (loop with tmp = text
+        for pair in twittering-stream--replace-table
+        do (setq tmp (replace-regexp-in-string (car pair) (cdr pair) tmp))
+        finally return tmp))
+
+;;TODO
+(defvar twittering-stream-suppress-message t)
+
 (defun twittering-stream--default-handler (json)
-  (or (twittering-stream--default-tweet-handler json)
-      (twittering-stream--default-event-handler json)))
+  (or (and twittering-stream-suppress-message
+           (not (eq major-mode 'twittering-mode)))
+      (when (or
+             (twittering-stream--default-tweet-handler json)
+             (twittering-stream--default-event-handler json))
+        (ding)
+        t)))
 
 (defun twittering-stream--default-event-handler (json)
   (let* ((event (cdr (assq 'event json)))
@@ -180,11 +212,70 @@
 
 (defun twittering-stream--message (fmt &rest args)
   (let* ((msg (apply 'format fmt args))
-         (truncated (truncate-string-to-width
-                     msg (max 0 (- (frame-width) 10)) nil nil "..."))
+         (truncated (twittering-stream-truncate msg))
          message-log-max)
-    (message "%s" truncated)
+    (message "%s" (twittering-stream--html2text truncated))
     t))
+
+(defvar twittering-stream--popup-buffer " *Twittering Stream Popup* ")
+(defvar twittering-stream--popup-window-config nil)
+
+(defun twitteirng-stream--popup (buffer)
+  (let* ((alist (mapcar (lambda (w) (cons (window-buffer w) w)) (window-list)))
+         (win (or (cdr (assq buffer alist))
+                  (progn
+                    (setq twittering-stream--popup-window-config
+                          (current-window-configuration))
+                    (let ((w (split-window nil (- (window-height) 4))))
+                      (set-window-buffer w buffer)
+                      w)))))
+    (cancel-function-timers 'twittering-stream-popup-cleanup)
+    (let ((old-win (selected-window)))
+      (select-window win)
+      (goto-char (point-max))
+      (set-window-start win (line-beginning-position -1))
+      (select-window old-win))
+    (run-at-time 3 nil 'twittering-stream-popup-cleanup)))
+
+(defun twittering-stream-popup-cleanup ()
+  (when (window-configuration-p twittering-stream--popup-window-config)
+    (set-window-configuration twittering-stream--popup-window-config)
+    (setq twittering-stream--popup-window-config nil)))
+
+(defun twittering-stream-popup-handler (json)
+  (let* ((notify (twittering-stream-popup-single-line json))
+         (buffer (get-buffer-create twittering-stream--popup-buffer)))
+    (with-current-buffer buffer
+      (when (> (line-number-at-pos (point-max)) 
+               (* twittering-stream-popup-max-threshold 2))
+        (goto-char (point-max))
+        (forward-line (- twittering-stream-popup-max-threshold))
+        (delete-region (point-min) (point)))
+      (goto-char (point-max))
+      (insert notify "\n"))
+    (twitteirng-stream--popup buffer)))
+
+(defvar twittering-stream-popup-max-threshold 300)
+
+(defun twittering-stream-popup-single-line (json)
+  (when (or
+         (let* ((user (cdr (assq 'user json)))
+                (name (cdr (assq 'screen_name user)))
+                (text (cdr (assq 'text json))))
+           (and name text
+                (string-match (format "@%s\\b" twittering-username) text)
+                (twittering-stream-truncate (format "[%s] %s" name text))))
+         (let* ((event (cdr (assq 'event json)))
+                (source (cdr (assq 'source json)))
+                (name (cdr (assq 'screen_name (and (consp source) source)))))
+           (and event name
+                (format "[%s] Event: %s" name event))))
+    (ding)
+    t))
+
+(defun twittering-stream-truncate (msg)
+  (truncate-string-to-width
+   msg (max 0 (- (frame-width) 10)) nil nil "..."))
 
 (provide 'twittering-stream)
 
