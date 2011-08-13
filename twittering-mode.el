@@ -516,6 +516,8 @@ StatusNet Service.")
 	       (search-url . twittering-get-search-url-statusnet)))
   "A list of alist of service methods.")
 
+(defvar twittering-favorites-timeline-page nil)
+
 ;;;;
 ;;;; Macro and small utility function
 ;;;;
@@ -3113,6 +3115,19 @@ The retrieved data can be referred as (gethash URL twittering-url-data-hash)."
       (twittering-run-on-idle twittering-url-request-sentinel-delay
 			      sentinel url data)
       data))))
+
+(defun twittering-favorites-clean-up-sentinel (proc status connection-info)
+  (when (memq status '(exit signal closed failed))
+    (let* ((request (cdr (assq 'request connection-info)))
+           (params (cdr (assq 'encoded-query-alist request)))
+           (page (cdr (assoc "page" params)))
+           (spec (cdr (assq 'timeline-spec connection-info)))
+           (buffer (twittering-get-buffer-from-spec spec)))
+      (when (and (stringp page)
+                 (buffer-live-p buffer))
+        (with-current-buffer buffer
+          (setq twittering-favorites-timeline-page (string-to-number page)))))
+    (twittering-release-process proc)))
 
 ;;;;
 ;;;; XML parser
@@ -6413,7 +6428,7 @@ rendered at POS, return nil."
        ))
     ))
 
-(defun twittering-get-and-render-timeline (&optional noninteractive id)
+(defun twittering-get-and-render-timeline (&optional noninteractive id backward-favorite)
   (let ((spec (twittering-current-timeline-spec))
 	(spec-string (twittering-current-timeline-spec-string)))
     (cond
@@ -6424,34 +6439,52 @@ rendered at POS, return nil."
      ((and noninteractive (twittering-process-active-p spec))
       ;; ignore non-interactive request if a process is waiting for responses.
       t)
+     ((eq (car-safe spec) 'favorites)
+      (let* ((nextpage (when backward-favorite
+                         (number-to-string 
+                          (1+ (or twittering-favorites-timeline-page 1)))))
+             (args
+              `((timeline-spec . ,spec)
+                (timeline-spec-string . ,spec-string)
+                ,@(when nextpage `((page . ,nextpage)))
+                (clean-up-sentinel
+                 . twittering-favorites-clean-up-sentinel)))
+             (additional-info
+              `((noninteractive . ,noninteractive)
+                (timeline-spec . ,spec)
+                (timeline-spec-string . ,spec-string)))
+             (proc
+              (twittering-call-api 'retrieve-timeline args additional-info)))
+        (when proc
+          (twittering-register-process proc spec spec-string))))
      ((twittering-timeline-spec-primary-p spec)
       (let* ((latest-status
-	      ;; Assume that a list which was returned by
-	      ;; `twittering-current-timeline-data' is sorted.
-	      (car (twittering-current-timeline-data spec)))
-	     (since_id (cdr-safe (assq 'id latest-status)))
-	     (args
-	      `((timeline-spec . ,spec)
-		(timeline-spec-string . ,spec-string)
-		,@(cond
-		   (id `((max_id . ,id)))
-		   (since_id `((since_id . ,since_id)))
-		   (t nil))
-		(clean-up-sentinel
-		 . ,(lambda (proc status connection-info)
-		      (when (memq status '(exit signal closed failed))
-			(twittering-release-process proc))))))
-	     (additional-info
-	      `((noninteractive . ,noninteractive)
-		(timeline-spec . ,spec)
-		(timeline-spec-string . ,spec-string)))
-	     (proc
-	      (twittering-call-api 'retrieve-timeline args additional-info)))
-	(when proc
-	  (twittering-register-process proc spec spec-string))))
+              ;; Assume that a list which was returned by
+              ;; `twittering-current-timeline-data' is sorted.
+              (car (twittering-current-timeline-data spec)))
+             (since_id (cdr-safe (assq 'id latest-status)))
+             (args
+              `((timeline-spec . ,spec)
+                (timeline-spec-string . ,spec-string)
+                ,@(cond
+                   (id `((max_id . ,id)))
+                   (since_id `((since_id . ,since_id)))
+                   (t nil))
+                (clean-up-sentinel
+                 . ,(lambda (proc status connection-info)
+                      (when (memq status '(exit signal closed failed))
+                        (twittering-release-process proc))))))
+             (additional-info
+              `((noninteractive . ,noninteractive)
+                (timeline-spec . ,spec)
+                (timeline-spec-string . ,spec-string)))
+             (proc
+              (twittering-call-api 'retrieve-timeline args additional-info)))
+        (when proc
+          (twittering-register-process proc spec spec-string))))
      (t
       (let ((type (car spec)))
-	(error "%s has not been supported yet" type))))))
+        (error "%s has not been supported yet" type))))))
 
 ;;;;
 ;;;; Map function for statuses on buffer
@@ -6981,6 +7014,7 @@ been initialized yet."
   (make-local-variable 'twittering-jojo-mode)
   (make-local-variable 'twittering-reverse-mode)
   (make-local-variable 'twittering-scroll-mode)
+  (make-local-variable 'twittering-favorites-timeline-page)
 
   (setq twittering-timeline-spec-string spec-string)
   (setq twittering-timeline-spec
@@ -8192,6 +8226,7 @@ The user is also blocked."
   (interactive)
   (when (twittering-buffer-p)
     (let ((spec (twittering-current-timeline-spec)))
+      (setq twittering-favorites-timeline-page nil)
       (twittering-remove-timeline-data spec) ;; clear current timeline.
       (twittering-render-timeline (current-buffer) nil) ;; clear buffer.
       (twittering-get-and-render-timeline))))
@@ -8264,7 +8299,8 @@ Return nil if no statuses are rendered."
 	    (spec-type (car (twittering-current-timeline-spec))))
 	(cond
 	 ((eq spec-type 'favorites)
-	  (message "Backward retrieval of favorites is not supported yet."))
+	  (message "Get more of the previous favorites...")
+	  (twittering-get-and-render-timeline nil nil t))
 	 (id
 	  (message "Get more of the previous timeline...")
 	  (twittering-get-and-render-timeline nil id))))))))
@@ -8310,7 +8346,8 @@ Otherwise, return a positive integer greater than POS."
 	    (spec-type (car (twittering-current-timeline-spec))))
 	(cond
 	 ((eq spec-type 'favorites)
-	  (message "Backward retrieval of favorites is not supported yet."))
+	  (message "Get more of the previous favorites...")
+	  (twittering-get-and-render-timeline nil nil t))
 	 (id
 	  (message "Get more of the previous timeline...")
 	  (twittering-get-and-render-timeline nil id)))))
