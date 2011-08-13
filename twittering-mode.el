@@ -3385,6 +3385,9 @@ Before calling this, you have to configure `twittering-bitly-login' and
     ;; Unicode Character 'FULLWIDTH COMMERCIAL AT' (U+FF20)
     (concat "\\(?:@\\|" (char-to-string full-width-commercial-at) "\\)")))
 
+(defvar twittering-regexp-hashtag-words
+  "\\(\\(?:\\w\\|[_-]\\)+\\)")
+
 (defun twittering-timeline-spec-to-string (timeline-spec &optional shorten)
   "Convert TIMELINE-SPEC into a string.
 If SHORTEN is non-nil, the abbreviated expression will be used."
@@ -3460,7 +3463,7 @@ Return cons of the spec and the rest string."
     `((home) . ,(substring str (match-end 0))))
    ((string-match (concat "^" twittering-regexp-atmark) str)
     `((replies) . ,(substring str (match-end 0))))
-   ((string-match (concat "^" twittering-regexp-hash "\\([a-zA-Z0-9_-]+\\)")
+   ((string-match (concat "^" twittering-regexp-hash twittering-regexp-hashtag-words)
 		  str)
     (let* ((tag (match-string 1 str))
 	   (rest (substring str (match-end 0))))
@@ -5777,7 +5780,7 @@ following symbols;
 	  'identity
 	  (list
 	   ;; hashtag
-	   (concat regexp-hash "\\([a-zA-Z0-9_-]+\\)")
+	   (concat regexp-hash twittering-regexp-hashtag-words)
 	   ;; @USER/LIST
 	   (concat regexp-atmark
 		   "\\(\\([a-zA-Z0-9_-]+\\)/\\([a-zA-Z0-9_-]+\\)\\)")
@@ -7160,7 +7163,7 @@ entry in `twittering-edit-skeleton-alist' are performed.")
 	   (hashtags
 	    (twittering-extract-matched-substring-all
 	     (concat twittering-regexp-hash
-		     "\\([a-zA-Z0-9_-]+\\)")
+		     twittering-regexp-hashtag-words)
 	     text))
 	   (footer
 	    (mapconcat (lambda (tag) (concat "#" tag))
@@ -7173,7 +7176,7 @@ entry in `twittering-edit-skeleton-alist' are performed.")
 	     current-spec))
 	   (hashtag-list
 	    (twittering-extract-matched-substring-all
-	     (concat "\\(" twittering-regexp-hash "[a-zA-Z0-9_-]+\\)")
+	     (concat "\\(" twittering-regexp-hash twittering-regexp-hashtag-words "\\)")
 	     query-string)))
       (when hashtag-list
 	(let ((footer (mapconcat 'identity hashtag-list " ")))
