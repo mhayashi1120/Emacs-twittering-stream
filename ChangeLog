@@ -1,3 +1,37 @@
+2011-09-03  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Fix a comment.
+
+	* twittering-mode.el: The properties for hashtags, mentions and
+	URIs are non-sticky.
+	(twittering-make-fontified-tweet-text): make the properties
+	non-sticky for the both direction.
+
+	* twittering-mode.el: Render a link wrapped by the t.co service as
+	the original URL.
+	(twittering-call-api): call APIs with the option
+	`include_entities=true' if possible.
+	(twittering-normalize-raw-status): extract entities.
+	(twittering-xmltree-to-status): extract entities of direct
+	messages.
+	(twittering-make-fontified-tweet-text): do not fontify a region if
+	it has been already fontified.
+	(twittering-make-fontified-tweet-text-with-entity): new function.
+	(twittering-generate-format-table): try to fontify the text with
+	entities first.
+
+	* twittering-mode.el: Fix indices in entities of a timeline
+	retrieved as XML.
+	(twittering-make-gap-list): new function.
+	(twittering-get-gap): new function.
+	(twittering-normalize-raw-status): correct indices in entities so
+	that they mean the position in the decoded text.
+
+	* twittering-mode.el: Suppress redundant decoding.
+	(twittering-normalize-raw-status): decode entities with
+	`twittering-decode-entities-after-parsing-xml'.
+	(twittering-decode-entities-after-parsing-xml): new function.
+
 2011-08-27  Tadashi MATSUO  <tad@mymail.twin.jp>
 
 	* twittering-mode.el: A list timeline includes native retweets.
