@@ -278,4 +278,5 @@
    msg (max 0 (- (frame-width) 10)) nil nil "..."))
 
 (provide 'twittering-stream)
+
 ;;; twittering-stream.el ends here
