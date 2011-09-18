@@ -376,6 +376,9 @@ This value will be used only when showing new tweets.
 
 See `twittering-show-replied-tweets' for more details.")
 
+(defvar twittering-default-retrieving-replied-tweets t
+  "*If non-nil, automatically retrieving replied statuses.")
+
 (defvar twittering-disable-overlay-on-too-long-string nil
   "*If non-nil, disable overlay on too long string on edit buffer.
 
@@ -461,6 +464,8 @@ If nil, this is initialized with a list of valied entries extracted from
 which is a lambda expression without being compiled.")
 
 (defvar twittering-timeline-data-table (make-hash-table :test 'equal))
+
+(defvar twittering-user-data-table (make-hash-table :test 'equal))
 
 (defvar twittering-username-face 'twittering-username-face)
 (defvar twittering-uri-face 'twittering-uri-face)
@@ -2289,6 +2294,24 @@ FORMAT is a response data format (\"xml\", \"atom\", \"json\")"
       (format "Response: %s"
 	      (twittering-get-error-message header-info (current-buffer)))))))
 
+(defvar twittering-last-updated-status nil)
+
+(defvar twittering-status-updated-hook nil
+  "*Hook run when new tweets are updated.
+
+You can read `twittering-last-updated-status'
+to get the xmltree of new tweets when this hook is run.")
+
+(defun twittering-update-status-sentinel (proc status connection-info header-info)
+  (prog1
+      (twittering-http-post-default-sentinel proc status connection-info header-info)
+    (ignore-errors
+      (setq twittering-last-updated-status
+            (let* ((xml (twittering-xml-parse-region (point-min) (point-max))))
+              (assq 'status xml)))
+      (run-hooks 'twittering-status-updated-hook))))
+
+
 ;;;;
 ;;;; OAuth
 ;;;;
@@ -3739,7 +3762,7 @@ referring the former ID."
 		buffer))))))
      modified-spec)))
 
-(defun twittering-get-replied-statuses (id &optional count)
+(defun twittering-get-replied-statuses (buffer id &optional count)
   "Return a list of replied statuses starting from the status specified by ID.
 Statuses are stored in ascending-order with respect to their IDs."
   (let ((result nil)
@@ -3752,10 +3775,17 @@ Statuses are stored in ascending-order with respect to their IDs."
 				   "")))
 	       (unless (string= "" replied-id)
 		 (let ((replied-status (twittering-find-status replied-id)))
-		   (when replied-status
+		   (cond
+                    (replied-status
 		     (setq result (cons replied-status result))
 		     (setq status replied-status)
-		     t))))))
+		     t)
+                    ((not twittering-default-retrieving-replied-tweets)
+                     nil)
+                    ;;TODO lock
+                    (t
+                     (twittering-fetch-replied-statuses buffer status)
+                     nil)))))))
     result))
 
 (defun twittering-have-replied-statuses-p (id)
@@ -3763,6 +3793,38 @@ Statuses are stored in ascending-order with respect to their IDs."
     (when status
       (let ((replied-id (cdr (assq 'in-reply-to-status-id status))))
 	(and replied-id (not (string= "" replied-id)))))))
+
+(defun twittering-fetch-replied-statuses (buffer status)
+  (let* ((base-id (cdr (assq 'id status)))
+         (id (cdr (assq 'in-reply-to-status-id status)))
+         (user (cdr (assq 'in-reply-to-screen-name status))))
+    (unless (twittering-find-status id)
+      (twittering-call-api 
+       'retrieve-timeline 
+       `((timeline-spec . (user ,user))
+         (timeline-spec-string . ,user)
+         (max_id . ,id)
+         (number . 50)
+         (clean-up-sentinel . twittering-fetch-replied-clean-up-sentinel))
+       ;; fake `twittering-add-statuses-to-timeline-data' spec
+       `((timeline-spec . (hide ,user))
+         (originated-buffer . ,buffer)
+         (originated-id . ,base-id)
+         (target-id . ,id))))))
+
+(defun twittering-fetch-replied-clean-up-sentinel (proc status connection-info)
+  (when (memq status '(exit signal closed failed))
+    (let ((buffer (cdr (assq 'originated-buffer connection-info)))
+          (base-id (cdr (assq 'originated-id connection-info)))
+          (id (cdr (assq 'target-id connection-info))))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (let ((status (twittering-find-status base-id)))
+            (message "Done fetching reply to %s" 
+                     (cdr (assq 'text status)))
+            ;;TODO if there is more reply status, retrieving sequentially?
+            ;; (twittering-get-replied-statuses buffer id)
+            ))))))
 
 (defun twittering-add-statuses-to-timeline-data (statuses &optional spec)
   (let* ((spec (or spec (twittering-current-timeline-spec)))
@@ -4273,7 +4335,7 @@ get-service-configuration -- Get the configuration of the server.
 	      ,@(when id `(("in_reply_to_status_id" . ,id))))))
       (twittering-http-post twittering-api-host
 			    (twittering-api-path "statuses/update")
-			    parameters nil additional-info)))
+			    parameters nil additional-info 'twittering-update-status-sentinel)))
    ((eq command 'destroy-status)
     ;; Destroy a status.
     (let ((id (cdr (assq 'id args-alist))))
@@ -4285,7 +4347,7 @@ get-service-configuration -- Get the configuration of the server.
     (let ((id (cdr (assq 'id args-alist))))
       (twittering-http-post twittering-api-host
 			    (twittering-api-path "statuses/retweet/" id)
-			    nil nil additional-info)))
+			    nil nil additional-info 'twittering-update-status-sentinel)))
    ((eq command 'verify-credentials)
     ;; Verify the account.
     (let ((sentinel (cdr (assq 'sentinel args-alist)))
@@ -4981,6 +5043,12 @@ GAP-LIST must be generated by `twittering-make-gap-list'."
 		  (source-uri . ""))))
 	  ;; Items related to the user that posted the tweet.
 	  ,@(let ((user-data (cddr (assq 'user status-data))))
+              (let ((id (assq-get 'id user-data)))
+                ;; use the cache when user data is omitted.
+                (if (assq-get 'screen_name user-data)
+                    (puthash id user-data twittering-user-data-table)
+                  (setq user-data (or (gethash id twittering-user-data-table)
+                                      user-data))))
 	      (mapcar
 	       (lambda (entry)
 		 (let* ((sym (elt entry 0))
@@ -6995,7 +7063,8 @@ If INTERRUPT is non-nil, the iteration is stopped if FUNC returns nil."
       (when interactive
 	(message "The replied statuses were already showed."))
     (let* ((base-id (twittering-get-id-at))
-	   (statuses (twittering-get-replied-statuses base-id
+	   (statuses (twittering-get-replied-statuses (current-buffer)
+                                                      base-id
 						      (if (numberp count)
 							  count)))
 	   (statuses (if twittering-reverse-mode
@@ -7027,9 +7096,13 @@ If INTERRUPT is non-nil, the iteration is stopped if FUNC returns nil."
 	       statuses)
 	      t))
 	(when interactive
-	  (if (twittering-have-replied-statuses-p base-id)
-	      (message "The status this replies to has not been fetched yet.")
-	    (message "This status is not a reply.")))
+	  (cond
+           ((not (twittering-have-replied-statuses-p base-id))
+            (message "This status is not a reply."))
+           (twittering-default-retrieving-replied-tweets
+            (message "Fetching the status this replies..."))
+           (t
+	    (message "The status this replies to has not been fetched yet."))))
 	nil))))
 
 (defun twittering-hide-replied-statuses (&optional interactive)
@@ -8352,6 +8425,24 @@ How to edit a tweet is determined by `twittering-update-status-funcion'."
 		 (mapcar 'twittering-ucs-to-char
 			 '(955 12363 12431 12356 12356 12424 955)) "")))
       (twittering-call-api 'update-status `((status . ,text))))))
+
+(defun twittering-immediate-cancel-last-tweet ()
+  (interactive)
+  (unless twittering-last-updated-status
+    (error "Cannot cancel last tweet"))
+  (let* ((status twittering-last-updated-status)
+         (id (caddr (assq 'id (cdr status))))
+         (text (caddr (assq 'text (cdr status)))))
+    (cond
+     
+     ((y-or-n-p (format "Cancel last tweet \"%s\"? " 
+                        ;; truncate to 30 wideth.
+                        ;; You have to remember just before tweet. :-)
+                        (truncate-string-to-width text 30)))
+      (twittering-call-api 'destroy-status `((id . ,id)))
+      (twittering-delete-status-from-data-table id))
+     (t
+      (message "Request canceled")))))
 
 (defun twittering-update-jojo (usr msg)
   (when (and (not (string= usr (twittering-get-username)))
