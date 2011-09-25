@@ -1,9 +1,10 @@
-;;; twittering-stream.el --- TODO
+;;; twittering-stream.el --- Twitter stream extension.
 
 ;; Author: Masahiro Hayashi <mhayashi1120@gmail.com>
 ;; Keywords: twitter user stream
 ;; Emacs: GNU Emacs 22 or later
 ;; Version: 0.0.1
+;; Package-Requires: ((json "1.2") (twittering-mode "2.0"))
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -142,7 +143,8 @@
 
 (defun twittering-stream--wget-filter (proc event)
   (let ((buf (process-buffer proc))
-        (cbuf (current-buffer)))
+        (cbuf (current-buffer))
+        (mode major-mode))              ; current mode
     (when (buffer-live-p buf)
       (with-current-buffer buf
         (save-excursion
@@ -156,9 +158,12 @@
                 (while (setq json (json-read))
                   (delete-region (point-min) (point))
                   (process-put proc 'twittering-stream--error-count 0)
-                  (with-current-buffer cbuf
-                    (save-excursion
-                      (funcall twittering-stream-handler-function json))))
+                  (when (or (not twittering-stream-suppress-message)
+                            (eq mode 'twittering-mode))
+                    (with-current-buffer cbuf
+                      (save-excursion
+                        (when (funcall twittering-stream-handler-function json)
+                          (ding))))))
               ;; ignore eob
               (end-of-file)
               (error
@@ -188,13 +193,9 @@
 (defvar twittering-stream-suppress-message t)
 
 (defun twittering-stream--default-handler (json)
-  (or (and twittering-stream-suppress-message
-           (not (eq major-mode 'twittering-mode)))
-      (when (or
-             (twittering-stream--default-tweet-handler json)
-             (twittering-stream--default-event-handler json))
-        (ding)
-        t)))
+  (or
+   (twittering-stream--default-tweet-handler json)
+   (twittering-stream--default-event-handler json)))
 
 (defun twittering-stream--default-event-handler (json)
   (let* ((event (cdr (assq 'event json)))
@@ -245,33 +246,33 @@
 (defun twittering-stream-popup-handler (json)
   (let* ((notify (twittering-stream-popup-single-line json))
          (buffer (get-buffer-create twittering-stream--popup-buffer)))
-    (with-current-buffer buffer
-      (when (> (line-number-at-pos (point-max)) 
-               (* twittering-stream-popup-max-threshold 2))
+    (when (stringp notify)
+      (with-current-buffer buffer
+        (when (> (line-number-at-pos (point-max)) 
+                 (* twittering-stream-popup-max-threshold 2))
+          (goto-char (point-max))
+          (forward-line (- twittering-stream-popup-max-threshold))
+          (delete-region (point-min) (point)))
         (goto-char (point-max))
-        (forward-line (- twittering-stream-popup-max-threshold))
-        (delete-region (point-min) (point)))
-      (goto-char (point-max))
-      (insert notify "\n"))
-    (twitteirng-stream--popup buffer)))
+        (insert notify "\n"))
+      (twitteirng-stream--popup buffer)
+      t)))
 
 (defvar twittering-stream-popup-max-threshold 300)
 
 (defun twittering-stream-popup-single-line (json)
-  (when (or
-         (let* ((user (cdr (assq 'user json)))
-                (name (cdr (assq 'screen_name user)))
-                (text (cdr (assq 'text json))))
-           (and name text
-                (string-match (format "@%s\\b" twittering-username) text)
-                (twittering-stream-truncate (format "[%s] %s" name text))))
-         (let* ((event (cdr (assq 'event json)))
-                (source (cdr (assq 'source json)))
-                (name (cdr (assq 'screen_name (and (consp source) source)))))
-           (and event name
-                (format "[%s] Event: %s" name event))))
-    (ding)
-    t))
+  (or
+   (let* ((user (cdr (assq 'user json)))
+          (name (cdr (assq 'screen_name user)))
+          (text (cdr (assq 'text json))))
+     (and name text
+          (string-match (format "@%s\\b" twittering-username) text)
+          (twittering-stream-truncate (format "[%s] %s" name text))))
+   (let* ((event (cdr (assq 'event json)))
+          (source (cdr (assq 'source json)))
+          (name (cdr (assq 'screen_name (and (consp source) source)))))
+     (and event name
+          (format "[%s] Event: %s" name event)))))
 
 (defun twittering-stream-truncate (msg)
   (truncate-string-to-width
