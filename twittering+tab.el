@@ -1,6 +1,5 @@
 ;;TODO
 ;; * show unseen count or unseen existence.
-;; * suppress blinking tab..
 ;; * show icon in tab if private TL.
 ;; * manipulate by mouse.
 
@@ -82,8 +81,8 @@
     (remove-hook 'twittering-mode-hook 'twittering+tab-initialize))))
 
 (defun twittering+tab-initialize ()
-  (set (make-local-variable 'header-line-format)
-       '(:eval (twittering+tab-line))))
+  (setq header-line-format 
+        '(:eval (twittering+tab-line))))
 
 (defun twittering+tab-background-propertize (string)
   (let ((end (length string)))
@@ -102,58 +101,79 @@
                 '(space :width 0.2)))
   "String used to separate tabs.")
 
+;; copied from w3m-ems.el
+(defvar twittering+tab-timer nil
+  "Internal variable used to say time has not gone by after the tab-line
+was updated last time.  It is used to control the `twittering+tab-line'
+function running too frequently, set by the function itself and
+cleared by a timer.")
+(make-variable-buffer-local 'twittering+tab-timer)
+
+(defvar twittering+tab-line-format nil)
+(make-variable-buffer-local 'twittering+tab-line-format)
+
 (defun twittering+tab-line ()
   "twittering-mode tab extension."
-  (let* ((bufs (twittering-get-buffer-list))
-         (fringes (window-fringes))
-         (fringe-width (truncate
-                        (/ (float (+ (or (nth 0 fringes) 0)
-                                     (or (nth 1 fringes) 0)))
-                           ;; pixel of char
-                           (frame-char-width))))
-         (win-width (+ (window-width)
-                       fringe-width
-                       ;; Assume that the vertical scroll-bar has
-                       ;; the width of two space characters.
-                       (if (car (frame-current-scroll-bars)) 2 0)))
-         (breadth twittering+tab-width)
-         (current (current-buffer))
-         (maxtabs (- (/ win-width breadth)
-                     (if (< (% win-width breadth) (/ breadth 2)) 1 0)))
-         (groups (twittering+tab-groups current bufs maxtabs))
-         (main-format (mapconcat 
-                       (lambda (buf)
-                         (let ((name (twittering+tab-name buf breadth)))
-                           (propertize name 'face 
-                                       (if (eq buf current)
-                                           (list 'twittering+tab-selected)
-                                         (list 'twittering+tab-unselected)))))
-                       (nth 1 groups)
-                       twittering+tab-separator))
-         (main-width (string-width main-format))
-         (rest-width (- win-width main-width)))
-    (concat
-     (and (nth 0 groups)
-          (concat
-           (let ((name (twittering+tab-name (nth 0 groups)
-                                            (if (nth 2 groups)
-                                                (/ rest-width 2)
-                                              rest-width))))
-             (propertize name 'face (list 'twittering+tab-unselected)))
-           twittering+tab-separator))
-     main-format
-     (and (nth 2 groups)
-          (concat
-           twittering+tab-separator
-           (let ((name (twittering+tab-name (nth 2 groups)
-                                            (if (nth 0 groups)
-                                                (/ rest-width 2)
-                                              rest-width))))
-             (propertize name 'face (list 'twittering+tab-unselected)))))
-     ;; fill background to full width
-     (twittering+tab-background-propertize
-      (propertize 
-       (make-string win-width ?\ ))))))
+  (or (and twittering+tab-timer twittering+tab-line-format)
+      (let* ((bufs (twittering-get-buffer-list))
+             (fringes (window-fringes))
+             (fringe-width (truncate
+                            (/ (float (+ (or (nth 0 fringes) 0)
+                                         (or (nth 1 fringes) 0)))
+                               ;; pixel of char
+                               (frame-char-width))))
+             (win-width (+ (window-width)
+                           fringe-width
+                           ;; Assume that the vertical scroll-bar has
+                           ;; the width of two space characters.
+                           (if (car (frame-current-scroll-bars)) 2 0)))
+             (breadth twittering+tab-width)
+             (current (current-buffer))
+             (maxtabs (- (/ win-width breadth)
+                         (if (< (% win-width breadth) (/ breadth 2)) 1 0)))
+             (groups (twittering+tab-groups current bufs maxtabs))
+             (main-format (mapconcat 
+                           (lambda (buf)
+                             (let ((name (twittering+tab-name buf breadth)))
+                               (propertize name 'face 
+                                           (if (eq buf current)
+                                               (list 'twittering+tab-selected)
+                                             (list 'twittering+tab-unselected)))))
+                           (nth 1 groups)
+                           twittering+tab-separator))
+             (main-width (string-width main-format))
+             (rest-width (- win-width main-width)))
+        ;; suppress flickering
+        (setq twittering+tab-timer t)
+        (run-at-time 0.1 nil
+                     (lambda (buffer)
+                       (when (buffer-live-p buffer)
+                         (with-current-buffer buffer
+                           (setq twittering+tab-timer nil))))
+                     current)
+        (setq twittering+tab-line-format
+              (concat
+               (and (nth 0 groups)
+                    (concat
+                     (let ((name (twittering+tab-name (nth 0 groups)
+                                                      (if (nth 2 groups)
+                                                          (/ rest-width 2)
+                                                        rest-width))))
+                       (propertize name 'face (list 'twittering+tab-unselected)))
+                     twittering+tab-separator))
+               main-format
+               (and (nth 2 groups)
+                    (concat
+                     twittering+tab-separator
+                     (let ((name (twittering+tab-name (nth 2 groups)
+                                                      (if (nth 0 groups)
+                                                          (/ rest-width 2)
+                                                        rest-width))))
+                       (propertize name 'face (list 'twittering+tab-unselected)))))
+               ;; fill background to full width
+               (twittering+tab-background-propertize
+                (propertize 
+                 (make-string win-width ?\ ))))))))
 
 (defun twittering+tab-name (buffer breadth)
   (let* ((name (buffer-name buffer)))
