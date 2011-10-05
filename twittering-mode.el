@@ -3823,6 +3823,7 @@ Statuses are stored in ascending-order with respect to their IDs."
          (clean-up-sentinel . twittering-fetch-replied-clean-up-sentinel))
        ;; fake `twittering-add-statuses-to-timeline-data' spec
        `((timeline-spec . (hide ,user))
+         (timeline-spec-string . ,user)
          (originated-buffer . ,buffer)
          (originated-id . ,base-id)
          (target-id . ,id))))))
