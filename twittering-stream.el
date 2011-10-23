@@ -92,6 +92,7 @@
          (args
           `("--save-headers"
             "--quiet"
+            ,(format "--output-file=%s" null-device)
             "--output-document=-"
             ,@(remove nil
                       (mapcar
