@@ -538,13 +538,13 @@ StatusNet Service.")
 ;;;; Macro and small utility function
 ;;;;
 
-(defun assocref (item alist)
+(defun twittering-assocref (item alist)
   (cdr (assoc item alist)))
 
-(defmacro list-push (value listvar)
+(defmacro twittering-list-push (value listvar)
   `(setq ,listvar (cons ,value ,listvar)))
 
-(defmacro case-string (str &rest clauses)
+(defmacro twittering-case-string (str &rest clauses)
   `(cond
     ,@(mapcar
        (lambda (clause)
@@ -677,7 +677,7 @@ as a list of a string on Emacs21."
 (defun twittering-debug-buffer ()
   (twittering-get-or-generate-buffer twittering-debug-buffer))
 
-(defmacro debug-print (obj)
+(defmacro twittering-debug-print (obj)
   (let ((obsym (gensym)))
     `(let ((,obsym ,obj))
        (if twittering-debug-mode
@@ -687,7 +687,7 @@ as a list of a string on Emacs21."
 	     ,obsym)
 	 ,obsym))))
 
-(defun debug-printf (fmt &rest args)
+(defun twittering-debug-printf (fmt &rest args)
   (when twittering-debug-mode
     (with-current-buffer (twittering-debug-buffer)
       (insert "[debug] " (apply 'format fmt args))
@@ -2191,10 +2191,10 @@ the server when the HTTP status code equals to 400 or 403."
 (defun twittering-http-get-default-sentinel (proc status connection-info header-info)
   (let ((status-line (cdr (assq 'status-line header-info)))
 	(status-code (cdr (assq 'status-code header-info))))
-    (case-string
+    (twittering-case-string
      status-code
      (("200")
-      (debug-printf "connection-info=%s" connection-info)
+      (twittering-debug-printf "connection-info=%s" connection-info)
       ;; It may be necessary to decode the contents of the buffer by
       ;; UTF-8 because `twittering-http-application-headers' specifies
       ;; utf-8 as one of acceptable charset.
@@ -2258,7 +2258,7 @@ the server when the HTTP status code equals to 400 or 403."
 	(status-code (cdr (assq 'status-code header-info)))
 	(indexes nil)
 	(mes nil))
-    (case-string
+    (twittering-case-string
      status-code
      (("200")
       (let ((xmltree (twittering-xml-parse-region (point-min) (point-max))))
@@ -2325,7 +2325,7 @@ FORMAT is a response data format (\"xml\", \"atom\", \"json\")"
 (defun twittering-http-post-default-sentinel (proc status connection-info header-info)
   (let ((status-line (cdr (assq 'status-line header-info)))
 	(status-code (cdr (assq 'status-code header-info))))
-    (case-string
+    (twittering-case-string
      status-code
      (("200")
       "Success: Post.")
@@ -2750,7 +2750,7 @@ function."
 	      (lambda (proc status connection-info header-info)
 		(let ((status-line (cdr (assq 'status-line header-info)))
 		      (status-code (cdr (assq 'status-code header-info))))
-		  (case-string
+		  (twittering-case-string
 		   status-code
 		   (("200")
 		    (when twittering-debug-mode
@@ -3362,7 +3362,7 @@ BEG and END mean a region that had been modified."
 		(lambda (proc status connection-info header-info)
 		  (let ((status-line (cdr (assq 'status-line header-info)))
 			(status-code (cdr (assq 'status-code header-info))))
-		    (case-string
+		    (twittering-case-string
 		     status-code
 		     (("200")
 		      (setq result (buffer-string))
@@ -4510,7 +4510,7 @@ get-service-configuration -- Get the configuration of the server.
 (defun twittering-update-service-configuration-sentinel (proc status connection-info header-info)
   (let ((status-line (cdr (assq 'status-line header-info)))
 	(status-code (cdr (assq 'status-code header-info))))
-    (case-string
+    (twittering-case-string
      status-code
      (("200")
       (let* ((xml (twittering-xml-parse-region (point-min) (point-max)))
@@ -4759,7 +4759,7 @@ If the authorization failed, return nil."
   (let ((status-line (cdr (assq 'status-line header-info)))
 	(status-code (cdr (assq 'status-code header-info)))
 	(username (cdr (assq 'username connection-info))))
-    (case-string
+    (twittering-case-string
      status-code
      (("200")
       (cond
@@ -5221,22 +5221,22 @@ references. This function decodes them."
 		     (string-match "&\\(#\\([0-9]+\\)\\|\\([a-zA-Z]+\\)\\);"
 				   encoded-str cursor))
 	  (when (> found-at cursor)
-	    (list-push (substring encoded-str cursor found-at) result))
+	    (twittering-list-push (substring encoded-str cursor found-at) result))
 	  (let ((number-entity (match-string-no-properties 2 encoded-str))
 		(letter-entity (match-string-no-properties 3 encoded-str)))
 	    (cond (number-entity
-		   (list-push
+		   (twittering-list-push
 		    (char-to-string
 		     (twittering-ucs-to-char
 		      (string-to-number number-entity))) result))
 		  (letter-entity
-		   (cond ((string= "gt" letter-entity) (list-push ">" result))
-			 ((string= "lt" letter-entity) (list-push "<" result))
-			 ((string= "quot" letter-entity) (list-push "\"" result))
-			 (t (list-push "?" result))))
-		  (t (list-push "?" result)))
+		   (cond ((string= "gt" letter-entity) (twittering-list-push ">" result))
+			 ((string= "lt" letter-entity) (twittering-list-push "<" result))
+			 ((string= "quot" letter-entity) (twittering-list-push "\"" result))
+			 (t (twittering-list-push "?" result))))
+		  (t (twittering-list-push "?" result)))
 	    (setq cursor (match-end 0))))
-	(list-push (substring encoded-str cursor) result)
+	(twittering-list-push (substring encoded-str cursor) result)
 	(apply 'concat (nreverse result)))
     ""))
 
@@ -6929,7 +6929,7 @@ rendered at POS, return nil."
 		     (twittering-show-replied-statuses
 		      twittering-default-show-replied-tweets))))))
 	   timeline-data)))
-      (debug-print (current-buffer))
+      (twittering-debug-print (current-buffer))
       (cond
        (keep-point
 	;; Restore points.
