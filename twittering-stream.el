@@ -3,7 +3,7 @@
 ;; Author: Masahiro Hayashi <mhayashi1120@gmail.com>
 ;; Keywords: twitter user stream
 ;; Emacs: GNU Emacs 22 or later
-;; Version: 0.0.1
+;; Version: 0.0.2
 ;; Package-Requires: ((json "1.2") (twittering-mode "2.0"))
 
 ;; This program is free software; you can redistribute it and/or
