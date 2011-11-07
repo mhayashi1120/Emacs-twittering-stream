@@ -5636,7 +5636,8 @@ return nil."
 		    ;; on decoding a XPM image with opacity. To ignore
 		    ;; opacity, the option "+matte" is added.
 		    '("+matte"))
-		,@(unless (fboundp 'create-animated-image)
+		,@(unless (or (fboundp 'create-animated-image)
+                              (fboundp 'image-animate))
 		    '("-flatten"))
 		,(if src-type (format "%s:-" src-type) "-")
 		,@(when (integerp twittering-convert-fix-size)
@@ -5665,6 +5666,7 @@ available and `twittering-use-convert' is non-nil."
       twittering-error-icon-data-pair)
      ((and (image-type-available-p image-type)
 	   (or (fboundp 'create-animated-image)
+               (fboundp 'image-animate)
 	       (not (and twittering-use-convert
 			 (eq image-type 'gif))))
 	   (or (not (integerp twittering-convert-fix-size))
@@ -5723,10 +5725,7 @@ image are displayed."
 	 (slice-spec
 	  (when (and twittering-convert-fix-size (not twittering-use-convert))
 	    (twittering-make-slice-spec raw-image-spec)))
-	 (image-spec
-	  (if (fboundp 'create-animated-image) ;; Emacs24 or later
-	      (create-animated-image data type t :margin 2 :ascent 'center)
-	    (create-image data type t :margin 2 :ascent 'center))))
+	 (image-spec (twittering-create-image data type)))
     (if slice-spec
 	`(display (,image-spec ,slice-spec))
       `(display ,image-spec))))
@@ -5808,6 +5807,18 @@ image are displayed."
 		 (insert ")\n")))
 	     stored-data)
 	    (insert "))")))))))
+
+(defun twittering-create-image (data type)
+  (cond
+   ((fboundp 'image-animate)
+    (let ((img (create-image data type t 
+                             :margin 2 :ascent 'center)))
+      (image-animate img nil t)
+      img))
+   ((fboundp 'create-animated-image) ;; Emacs24 or later
+    (create-animated-image data type t :margin 2 :ascent 'center))
+   (t
+    (create-image data type t :margin 2 :ascent 'center))))
 
 (defun twittering-load-icon-properties (&optional filename)
   (let* ((filename (or filename twittering-icon-storage-file))
