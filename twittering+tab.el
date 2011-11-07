@@ -143,7 +143,7 @@ cleared by a timer.")
                            twittering+tab-separator))
              (main-width (string-width main-format))
              (rest-width (- win-width main-width)))
-        ;; suppress flickering
+        ;; suppress flickering tab
         (setq twittering+tab-timer t)
         (run-at-time 0.1 nil
                      (lambda (buffer)
