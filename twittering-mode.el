@@ -45,7 +45,6 @@
 
 (eval-when-compile (require 'cl))
 (require 'xml)
-(require 'parse-time)
 
 (eval-and-compile
   ;; On byte-compilation, Emacs21 requires loading the libraries
@@ -2230,16 +2229,32 @@ the server when the HTTP status code equals to 400 or 403."
 	  (decode-coding-region (point-min) (point-max) 'utf-8)))
       (let* ((spec (cdr (assq 'timeline-spec connection-info)))
 	     (spec-string (cdr (assq 'timeline-spec-string connection-info)))
+	     (format (cdr (assq 'format connection-info)))
 	     (statuses
-	      (let ((xmltree
-		     (twittering-xml-parse-region (point-min) (point-max))))
-		(cond
-		 ((null xmltree)
-		  nil)
-		 ((eq 'search (car spec))
-		  (twittering-atom-xmltree-to-status xmltree))
-		 (t
-		  (twittering-xmltree-to-status xmltree))))))
+	      (cond
+	       ((eq format 'json)
+		(let ((json-array (json-read)))
+		  (cond
+		   ((null json-array)
+		    nil)
+		   ((eq (car spec) 'search)
+		    (mapcar 'twittering-json-object-to-a-status-on-search
+			    (cdr (assq 'results json-array))))
+		   (t
+		    (mapcar 'twittering-json-object-to-a-status
+			    json-array)))))
+	       ((eq format 'xml)
+		(let ((xmltree
+		       (twittering-xml-parse-region (point-min) (point-max))))
+		  (when xmltree
+		    (twittering-xmltree-to-status xmltree))))
+	       ((eq format 'atom)
+		(let ((xmltree
+		       (twittering-xml-parse-region (point-min) (point-max))))
+		  (when xmltree
+		    (twittering-atom-xmltree-to-status xmltree))))
+	       (t
+		nil))))
 	(when statuses
 	  (let ((new-statuses
 		 (twittering-add-statuses-to-timeline-data statuses spec))
@@ -4144,6 +4159,7 @@ retrieve-timeline -- Retrieve a timeline.
   Valid key symbols in ARGS-ALIST:
     timeline-spec -- the timeline spec to be retrieved.
     timeline-spec-string -- the string representation of the timeline spec.
+    format -- (optional) the symbol specifying the format.
     number -- (optional) how many tweets are retrieved. It must be an integer.
       If nil, `twittering-number-of-tweets-on-retrieval' is used instead.
       The maximum for search timeline is 100, and that for other timelines is
@@ -4151,6 +4167,10 @@ retrieve-timeline -- Retrieve a timeline.
       If the given number exceeds the maximum, the maximum is used instead.
     max_id -- (optional) the maximum ID of retrieved tweets.
     since_id -- (optional) the minimum ID of retrieved tweets.
+    sentinel -- (optional) the sentinel that processes the buffer consisting
+      of retrieved data.. This is used as an argument SENTINEL of
+      `twittering-send-http-request' via `twittering-http-get'.
+      If nil, `twittering-http-get-default-sentinel' is used.
     clean-up-sentinel -- (optional) the clean-up sentinel that post-processes
       the buffer associated to the process. This is used as an argument
       CLEAN-UP-SENTINEL of `twittering-send-http-request' via
@@ -4280,8 +4300,10 @@ get-service-configuration -- Get the configuration of the server.
 		,@(when since_id `(("since_id" . ,since_id)))
 		,@(cond
 		   ((eq spec-type 'search)
-		    `(("q" . ,word)
-		      ("rpp" . ,number-str)))
+		    `(("include_entities" . "true")
+		      ("q" . ,word)
+		      ("rpp" . ,number-str)
+		      ("with_twitter_user_id". "true")))
 		   ((eq spec-type 'list)
 		    (let ((username (elt spec 1))
 			  (list-name (elt spec 2)))
@@ -4310,9 +4332,16 @@ get-service-configuration -- Get the configuration of the server.
 		    ;; retweets_of_me
 		    `(("include_entities" . "true")
 		      ("count" . ,number-str))))))))
-	   (format (if (eq spec-type 'search)
-		       "atom"
-		     "xml"))
+	   (format
+	    (let ((format (cdr (assq 'format args-alist))))
+	      (cond
+	       ((and format (symbolp format))
+		format)
+	       ((eq spec-type 'search)
+		'atom)
+	       (t
+		'xml))))
+	   (format-str (symbol-name format))
 	   (simple-spec-list
 	    '((direct_messages . "direct_messages")
 	      (direct_messages_sent . "direct_messages/sent")
@@ -4345,10 +4374,12 @@ get-service-configuration -- Get the configuration of the server.
 	     ((assq spec-type simple-spec-list)
 	      (twittering-api-path (cdr (assq spec-type simple-spec-list))))
 	     (t nil)))
-	   (clean-up-sentinel (cdr (assq 'clean-up-sentinel args-alist))))
+	   (sentinel (cdr (assq 'sentinel args-alist)))
+	   (clean-up-sentinel (cdr (assq 'clean-up-sentinel args-alist)))
+	   (additional-info `(,@additional-info (format . ,format))))
       (if (and host method)
-	  (twittering-http-get host method parameters format
-			       additional-info nil clean-up-sentinel)
+	  (twittering-http-get host method parameters format-str
+			       additional-info sentinel clean-up-sentinel)
 	(error "Invalid timeline spec"))))
    ((eq command 'get-list-index)
     ;; Get list names.
@@ -4852,25 +4883,30 @@ If the authorization failed, return nil."
       (twittering-add-to-history 'twittering-user-history (cadr spec)))))
 
 (defun twittering-atom-xmltree-to-status-datum (atom-xml-entry)
-  (let ((id-str (car (cddr (assq 'id atom-xml-entry))))
-	(time-str (car (cddr (assq 'updated atom-xml-entry))))
-	(author-str (car (cddr (assq 'name (assq 'author atom-xml-entry))))))
-    `((created-at
-       ;; ISO 8601
-       ;; Twitter -> "2010-05-08T05:59:41Z"
-       ;; StatusNet -> "2010-05-08T08:44:39+00:00"
-       . ,(if (string-match "\\(.*\\)T\\(.*\\)\\(Z\\|\\([-+][0-2][0-9]\\):?\\([0-5][0-9]\\)\\)" time-str)
-	      ;; time-str is formatted as
-	      ;; "Combined date and time in UTC:" in ISO 8601.
-	      (let ((timezone (match-string 3 time-str)))
-		(format "%s %s %s"
-			(match-string 1 time-str) (match-string 2 time-str)
-			(if (string= "Z" timezone)
-			    "+0000"
-			  (concat (match-string 4 time-str)
-				  (match-string 5 time-str)))))
+  (let* ((id-str (car (cddr (assq 'id atom-xml-entry))))
+	 (time-str (car (cddr (assq 'updated atom-xml-entry))))
+	 (author-str (car (cddr (assq 'name (assq 'author atom-xml-entry)))))
+	 (formatted-time-str
+	  ;; ISO 8601
+	  ;; Twitter -> "2010-05-08T05:59:41Z"
+	  ;; StatusNet -> "2010-05-08T08:44:39+00:00"
+	  (cond
+	   ((string-match
+	     "\\(.*\\)T\\(.*\\)\\(Z\\|\\([-+][0-2][0-9]\\):?\\([0-5][0-9]\\)\\)"
+	     time-str)
+	    ;; time-str is formatted as
+	    ;; "Combined date and time in UTC:" in ISO 8601.
+	    (let ((timezone (match-string 3 time-str)))
+	      (format "%s %s %s"
+		      (match-string 1 time-str) (match-string 2 time-str)
+		      (if (string= "Z" timezone)
+			  "+0000"
+			(concat (match-string 4 time-str)
+				(match-string 5 time-str))))))
+	   (t
 	    ;; unknown format?
-	    time-str))
+	    time-str))))
+    `((created-at . ,(date-to-time formatted-time-str))
       (id . ,(progn
 	       (string-match ":\\([0-9]+\\)$" id-str)
 	       (match-string 1 id-str)))
@@ -5017,15 +5053,19 @@ GAP-LIST must be generated by `twittering-make-gap-list'."
 				data)
 			     data))))
 	     '(;; Raw entries.
-	       (created-at created_at)
 	       (id id)
 	       (in-reply-to-screen-name in_reply_to_screen_name)
 	       (in-reply-to-status-id in_reply_to_status_id)
 	       (recipient-screen-name recipient_screen_name)
-	       (truncated truncated)
 	       ;; Encoded entries.
 	       (text text t)
 	       ))
+	  ;; created_at
+	  (created-at . ,(date-to-time (assq-get 'created_at status-data)))
+	  ;; Replace "true" and "false" into t and nil.
+	  ,@(mapcar (lambda (sym)
+		      `(,sym . ,(string= "true" (assq-get sym status-data))))
+		    '(favorited truncated))
 	  ;; Entities.
 	  ,(let* ((entity-data (cddr (assq 'entities status-data)))
 		  (encoded-text (assq-get 'text status-data))
@@ -5141,12 +5181,17 @@ GAP-LIST must be generated by `twittering-make-gap-list'."
 		 (user-id id)
 		 (user-profile-image-url profile_image_url)
 		 (user-url url)
-		 (user-protected protected)
 		 ;; Encoded entries.
 		 (user-name name t)
 		 (user-screen-name screen_name t)
 		 (user-location location t)
-		 (user-description description t))))))))))
+		 (user-description description t))))
+	  ,@(let ((user-data (cddr (assq 'user status-data))))
+	      (mapcar (lambda (entry)
+			`(,(car entry)
+			  . ,(string= "true"
+				      (assq-get (cdr entry) user-data))))
+		      '((user-protected . protected))))))))))
 
 (defun twittering-xmltree-to-status (xmltree)
   (setq xmltree
@@ -5249,6 +5294,205 @@ references. This function decodes them."
 	(twittering-list-push (substring encoded-str cursor) result)
 	(apply 'concat (nreverse result)))
     ""))
+
+;; JSON
+(defun twittering-extract-common-element-from-json (json-object)
+  "Extract common parameters of a tweet from JSON-OBJECT.
+Return an alist including text, created_at and entities, which are common
+to JSON objects from ordinary timeline and search timeline."
+  (let* ((encoded-text (cdr (assq 'text json-object)))
+	 (text
+	  (twittering-decode-entities-after-parsing-xml encoded-text))
+	 (gap-list (twittering-make-gap-list text))
+	 (entities (cdr (assq 'entities json-object)))
+	 (urls (cdr (assq 'urls entities)))
+	 (hashtags (cdr (assq 'hashtags entities)))
+	 (mentions (cdr (assq 'user_mentions entities))))
+    `((text . ,text)
+      (created-at
+       . ,(apply 'encode-time
+		 (parse-time-string (cdr (assq 'created_at json-object)))))
+      (entity
+       (hashtags . ,(mapcar (lambda (entry)
+			      (let* ((indices (cdr (assq 'indices entry)))
+				     (start (elt indices 0))
+				     (end (elt indices 1))
+				     (gap
+				      (twittering-get-gap start gap-list)))
+				`((start . ,(- start gap))
+				  (end . ,(- end gap))
+				  (text . ,(cdr (assq 'text entry))))))
+			    hashtags))
+       (mentions . ,(mapcar (lambda (entry)
+			      (let* ((indices (cdr (assq 'indices entry)))
+				     (start (elt indices 0))
+				     (end (elt indices 1))
+				     (gap
+				      (twittering-get-gap start gap-list)))
+				`((start . ,(- start gap))
+				  (end . ,(- end gap))
+				  (id . ,(cdr (assq 'id_str entry)))
+				  (name . ,(cdr (assq 'name entry)))
+				  (screen-name
+				   . ,(cdr (assq 'screen_name entry))))))
+			    mentions))
+       (urls . ,(mapcar (lambda (entry)
+			  (let* ((indices (cdr (assq 'indices entry)))
+				 (start (elt indices 0))
+				 (end (elt indices 1))
+				 (gap (twittering-get-gap start gap-list)))
+			    `((start . ,(- start gap))
+			      (end . ,(- end gap))
+			      (url . ,(cdr (assq 'url entry)))
+			      (display-url
+			       . ,(cdr (assq 'display_url entry)))
+			      (expanded-url
+			       . ,(cdr (assq 'expanded_url entry))))))
+			urls))))))
+
+(defun twittering-json-object-to-a-status (json-object)
+  "Convert JSON-OBJECT representing a tweet into an alist representation.
+JSON-OBJECT must originate in an ordinary timeline, not a search timeline.
+To convert a JSON object from a search timeline, use
+`twittering-json-object-to-a-status-on-search'."
+  (let* ((raw-retweeted-status (cdr (assq 'retweeted_status json-object))))
+    (cond
+     (raw-retweeted-status
+      (let ((retweeted-status
+	     (twittering-json-object-to-a-status-base raw-retweeted-status))
+	    (retweeting-status
+	     (twittering-json-object-to-a-status-base json-object))
+	    (items-overwritten-by-retweet
+	     '(id)))
+	`(,@(mapcar
+	     (lambda (entry)
+	       (let ((sym (car entry))
+		     (value (cdr entry)))
+		 (if (memq sym items-overwritten-by-retweet)
+		     (let ((value-on-retweet
+			    (cdr (assq sym retweeting-status))))
+		       ;; Replace the value in `retweeted-status' with
+		       ;; that in `retweeting-status'.
+		       `(,sym . ,value-on-retweet))
+		   `(,sym . ,value))))
+	     retweeted-status)
+	  ,@(mapcar
+	     (lambda (entry)
+	       (let ((sym (car entry))
+		     (value (cdr entry)))
+		 `(,(intern (concat "retweeted-" (symbol-name sym)))
+		   . ,value)))
+	     retweeted-status)
+	  ,@(mapcar
+	     (lambda (entry)
+	       (let ((sym (car entry))
+		     (value (cdr entry)))
+		 `(,(intern (concat "retweeting-" (symbol-name sym)))
+		   . ,value)))
+	     retweeting-status))))
+     (t
+      (twittering-json-object-to-a-status-base json-object)))))
+
+(defun twittering-json-object-to-a-status-base (json-object)
+  (let ((user-data (cdr (assq 'user json-object))))
+    `(,@(twittering-extract-common-element-from-json json-object)
+      ,@(let ((symbol-table
+	       '((id_str . id)
+		 (in_reply_to_screen_name . in-reply-to-screen-name)
+		 (in_reply_to_status_id_str . in-reply-to-status-id)
+		 (recipient_screen_name . recipient-screen-name))))
+	  (remove nil
+		  (mapcar
+		   (lambda (entry)
+		     (let* ((sym (car entry))
+			    (value (cdr entry))
+			    (dest (cdr (assq sym symbol-table))))
+		       (cond
+			(dest
+			 (when value
+			   `(,dest . ,value)))
+			((memq sym '(favorited truncated))
+			 `(,sym . ,(if (eq value :json-false)
+				       nil
+				     t))))))
+		   json-object)))
+      ;; source
+      ,@(let ((source (cdr (assq 'source json-object))))
+	  (if (and source
+		   (string-match "<a href=\"\\(.*?\\)\".*?>\\(.*\\)</a>"
+				 source))
+	      (let ((uri (match-string-no-properties 1 source))
+		    (caption (match-string-no-properties 2 source)))
+		`((source . ,caption)
+		  (source-uri . ,uri)))
+	    `((source . ,source)
+	      (source-uri . ""))))
+      ;; user data
+      ,@(let ((symbol-table
+	       '((id_str . user-id)
+		 (profile_image_url . user-profile-image-url)
+		 (url . user-url)
+		 (protected . user-protected)
+		 (name . user-name)
+		 (screen_name . user-screen-name)
+		 (location . user-location)
+		 (description . user-description))))
+	  (remove nil
+		  (mapcar (lambda (entry)
+			    (let* ((sym (car entry))
+				   (value (cdr entry))
+				   (value
+				    (cond
+				     ((eq sym 'protected)
+				      (if (eq value :json-false)
+					  nil
+					t))
+				     ((eq value :json-false)
+				      nil)
+				     (t
+				      value))))
+			      (when value
+				(let ((dest (cdr (assq sym symbol-table))))
+				  (when dest
+				    `(,dest . ,value))))))
+			  user-data))))))
+
+(defun twittering-json-object-to-a-status-on-search (json-object)
+  "Convert JSON-OBJECT representing a tweet into an alist representation.
+JSON-OBJECT must originate in a search timeline.
+To convert a JSON object from other timelines, use
+`twittering-json-object-to-a-status'."
+  `(,@(twittering-extract-common-element-from-json json-object)
+    ,@(let ((symbol-table
+	     '((id_str . id)
+	       (to_user . recipient-screen-name)
+	       ;; user data
+	       (from_user_id_str . user-id)
+	       (profile_image_url . user-profile-image-url)
+	       (from_user_name . user-name)
+	       (from_user . user-screen-name))))
+	  (remove nil
+		  (mapcar
+		   (lambda (entry)
+		     (let* ((sym (car entry))
+			    (value (cdr entry))
+			    (dest (cdr (assq sym symbol-table))))
+		       (when (and dest value)
+			 `(,dest . ,value))))
+		   json-object)))
+    ;; source
+    ,@(let ((source
+	       (twittering-decode-html-entities
+		(cdr (assq 'source json-object)))))
+	  (if (and source
+		   (string-match "<a href=\"\\(.*?\\)\".*?>\\(.*\\)</a>"
+				 source))
+	      (let ((uri (match-string-no-properties 1 source))
+		    (caption (match-string-no-properties 2 source)))
+		`((source . ,caption)
+		  (source-uri . ,uri)))
+	    `((source . ,source)
+	      (source-uri . ""))))))
 
 ;;;;
 ;;;; List info retrieval
@@ -6123,11 +6367,6 @@ static char * unplugged_xpm[] = {
 ;;;; Format of a status
 ;;;;
 
-(defun twittering-created-at-to-seconds (created-at)
-  (let ((encoded-time (apply 'encode-time (parse-time-string created-at))))
-    (+ (* (car encoded-time) 65536)
-       (cadr encoded-time))))
-
 (eval-and-compile
   (defsubst twittering-make-common-properties (status)
     "Generate a property list that tweets should have irrespective of format."
@@ -6446,9 +6685,12 @@ following symbols;
   `(("%" . "%")
     ("}" . "}")
     ("#" . (cdr (assq 'id ,status-sym)))
-    ("'" . (when (string= "true" (cdr (assq 'truncated ,status-sym)))
+    ("'" . (when (cdr (assq 'truncated ,status-sym))
 	     "..."))
-    ("c" . (cdr (assq 'created-at ,status-sym)))
+    ("c" .
+     (let ((system-time-locale "C"))
+       (format-time-string "%a %b %d %H:%M:%S %z %Y"
+			   (cdr (assq 'created-at ,status-sym)))))
     ("d" . (cdr (assq 'user-description ,status-sym)))
     ("f" .
      (twittering-make-string-with-source-property
@@ -6478,7 +6720,7 @@ following symbols;
        (unless (string= "" location)
 	 (concat " [" location "]"))))
     ("l" . (cdr (assq 'user-location ,status-sym)))
-    ("p" . (when (string= "true" (cdr (assq 'user-protected ,status-sym)))
+    ("p" . (when (cdr (assq 'user-protected ,status-sym))
 	     "[x]"))
     ("r" .
      (let ((reply-id (or (cdr (assq 'in-reply-to-status-id ,status-sym)) ""))
@@ -6542,10 +6784,7 @@ following symbols;
 	(let ((time-format (or (match-string 2 following)
 			       "%I:%M %p %B %d, %Y"))
 	      (rest (substring following (match-end 0))))
-	  `((let* ((created-at-str (cdr (assq 'created-at ,status-sym)))
-		   (created-at
-		    (apply 'encode-time
-			   (parse-time-string created-at-str)))
+	  `((let* ((created-at (cdr (assq 'created-at ,status-sym)))
 		   (url
 		    (if (assq 'retweeted-id ,status-sym)
 			(twittering-get-status-url
@@ -6566,9 +6805,7 @@ following symbols;
        ((string-match "\\`C\\({\\([^}]*\\)}\\)?" following)
 	(let ((time-format (or (match-string 2 following) "%H:%M:%S"))
 	      (rest (substring following (match-end 0))))
-	  `((let* ((created-at-str (cdr (assq 'created-at ,status-sym)))
-		   (created-at (apply 'encode-time
-				      (parse-time-string created-at-str))))
+	  `((let* ((created-at (cdr (assq 'created-at ,status-sym))))
 	      (twittering-make-string-with-uri-property
 	       (format-time-string ,time-format created-at) ,status-sym))
 	    . ,rest)))
@@ -7045,6 +7282,8 @@ This function returns the position where the next status should be inserted."
              (args
               `((timeline-spec . ,spec)
                 (timeline-spec-string . ,spec-string)
+		(format . ,(when (require 'json nil t)
+			     'json))
                 ,@(cond
                    (id `((max_id . ,id)))
                    (since_id `((since_id . ,since_id)))
@@ -7613,6 +7852,11 @@ been initialized yet."
   ;; This technique is derived from `lisp/bs.el' distributed with Emacs 22.2.
   (make-local-variable 'font-lock-global-modes)
   (setq font-lock-global-modes '(not twittering-mode))
+
+  ;; Prevent the field property attached to tweets from interfering
+  ;; the cursor motion based on logical lines.
+  (make-local-variable 'inhibit-field-text-motion)
+  (setq inhibit-field-text-motion t)
 
   (make-local-variable 'twittering-timeline-spec)
   (make-local-variable 'twittering-timeline-spec-string)
@@ -8681,7 +8925,7 @@ How to edit a tweet is determined by `twittering-update-status-funcion'."
   (interactive)
   (let* ((id (twittering-get-id-at))
 	 (status (twittering-find-status (twittering-get-id-at))))
-    (when (equal "true" (cdr (assoc 'user-protected status)))
+    (when (cdr (assq 'user-protected status))
       (error "Cannot retweet protected tweets.")))
   (let ((username (get-text-property (point) 'username))
 	(text (get-text-property (point) 'text))

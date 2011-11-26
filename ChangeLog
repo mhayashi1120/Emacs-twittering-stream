@@ -1,3 +1,71 @@
+2011-11-26  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Fix the strange behavior on moving the
+	cursor according to logical lines. Thanks to lemit who reported
+	the problem.
+	(twittering-mode-setup): bind `inhibit-field-text-motion' to
+	non-nil as a buffer-local variable. If it is nil, the field
+	property attached tweets interferes with the cursor motion based
+	on logical lines.
+
+	* twittering-mode.el: Store the tweet parameters, `truncated' and
+	`user-protected', as boolean parameters.
+	(twittering-normalize-raw-status): store the `truncated' and
+	`user-protected' parameters as boolean parameters.
+	(twittering-generate-format-table): use the `truncated' and
+	`user-protected' parameters as boolean.
+	(twittering-organic-retweet): likewise.
+	* test/test-twittering-mode.el: Update tests to follow the change
+	of internal representation of a tweet.
+	* test/fixture/timeline-data.el: Update data to follow the change
+	of internal representation of a tweet.
+
+	* twittering-mode.el: Store the tweet parameter `created-at' as
+	Emacs internal time representation. This avoids parsing a time
+	string whenever a tweet is re-rendered.
+	(twittering-atom-xmltree-to-status-datum): store `created-at' as
+	Emacs internal time representation.
+	(twittering-normalize-raw-status): likewise.
+	(twittering-created-at-to-seconds): removed.
+	(twittering-generate-format-table): use the parameters
+	`created-at' as Emacs internal time representation.
+	(twittering-generate-formater-for-first-spec): likewise.
+	* test/test-twittering-mode.el: Update tests to follow the change
+	of internal representation of a tweet.
+	* test/fixture/timeline-data.el: Update data to follow the change
+	of internal representation of a tweet.
+
+	* twittering-mode.el: `twittering-call-api' receives `sentinel' as
+	an argument for the command `retrieve-timeline'.
+	(twittering-call-api): receive `sentinel' as an argument for
+	the command `retrieve-timeline'.
+
+	* twittering-mode.el: `twittering-call-api' receives `format' as
+	an argument for the command `retrieve-timeline'.
+	(twittering-http-get-default-sentinel): refer to `format' in
+	`connection-info' for parsing the retrieved content.
+	(twittering-call-api): receive `format' as an argument for the
+	command `retrieve-timeline'. The `format' is automatically added
+	to the last of `additional-info' for `twittering-http-get'.
+
+	* twittering-mode.el: Support retrieval of tweets as the JSON
+	format.
+	(twittering-http-get-default-sentinel): support the JSON format.
+	(twittering-extract-common-element-from-json): new function.
+	(twittering-json-object-to-a-status): new function.
+	(twittering-json-object-to-a-status-base): new function.
+	(twittering-json-object-to-a-status-on-search): new function.
+
+	* twittering-mode.el: Retrieve tweets as the JSON format if
+	possible.
+	(twittering-get-and-render-timeline): retrieve tweets as the JSON
+	format if possible.
+
+	* twittering-mode.el: Render a link wrapped by the t.co service as
+	the original URL on a search timeline if possible. This requires
+	`json.el'.
+	(twittering-call-api): retrieve a search timeline with entities.
+
 2011-11-13  Tadashi MATSUO  <tad@mymail.twin.jp>
 
 	* twittering-mode.el: Fix the bug that unconditionally adds

@@ -70,13 +70,11 @@
   string considered as a hashtag in twittering-mode may not be treated
   as a hashtag in the Twitter web UI.
 * Rendering the t.co wrapped link as the original URL.
-  If a tweet on a timeline except a search timeline includes a link
-  wrapped by the t.co service, it is rendered as the original URL. But
-  the link will be opened as the wrapped URL when you invoke
-  `twittering-enter' (bound to `C-m' in default). On a search
-  timeline, it is rendered as a URL wrapped by the t.co service
-  because the search API of Twitter does not provide additional
-  information (entities) of tweets.
+  If a tweet includes a link wrapped by the t.co service, it is
+  rendered as the original URL. If `json.el' is unavailable, a link on
+  a search timeline is rendered as the wrapped URL. But the link will
+  be opened as the wrapped URL when you invoke `twittering-enter'
+  (bound to `C-m' in default).
 * Posting a tweet consiting of mentions from pop-up buffer.
   From pop-up buffer, you can post a tweet consisting of
   mentions.
@@ -155,6 +153,12 @@
   newer than 21. On Emacs 22 or later, the directories are no longer
   added to `load-path' on byte-compilation. The bug has been fixed.
   Thanks to HKey who has discovered the bug.
+* Fix of the strange motion of the cursor.
+  The cursor motion based on logical lines had caused non-intuitive
+  behavior by interfering text property attaced to tweets. The problem
+  did not appear when the motion was based on display line. The bug
+  has been fixed.
+  Thanks to lemit who reported the problem.
 
  2.0.0: 2011-04-22
 ------------------
