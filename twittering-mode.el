@@ -2233,13 +2233,17 @@ the server when the HTTP status code equals to 400 or 403."
 	     (statuses
 	      (cond
 	       ((eq format 'json)
-		(let ((json-array (json-read)))
+		(let ((json-array (twittering-json-read)))
 		  (cond
 		   ((null json-array)
 		    nil)
 		   ((eq (car spec) 'search)
 		    (mapcar 'twittering-json-object-to-a-status-on-search
 			    (cdr (assq 'results json-array))))
+		   ((twittering-timeline-spec-is-direct-messages-p spec)
+		    (mapcar
+		     'twittering-json-object-to-a-status-on-direct-messages
+		     json-array))
 		   (t
 		    (mapcar 'twittering-json-object-to-a-status
 			    json-array)))))
@@ -3296,6 +3300,32 @@ exiting abnormally by decoding unknown numeric character reference."
 	    (apply 'xml-parse-region args)
 	  (error
 	   (message "Failed to parse the retrieved XML.")
+	   nil))
+      (ad-disable-advice 'decode-char 'after
+			 'twittering-add-fail-over-to-decode-char)
+      (if activated
+	  (ad-activate 'decode-char)
+	(ad-deactivate 'decode-char)))))
+
+;;;;
+;;;; JSON parser with a fallback character
+;;;;
+
+(defun twittering-json-read (&rest args)
+  "Wrapped `json-read' in order to avoid decoding errors.
+`json-read' is called after activating the advice
+`twittering-add-fail-over-to-decode-char'.
+This prevents `json-read' from exiting abnormally by decoding an unknown
+numeric character reference."
+  (let ((activated (ad-is-active 'decode-char)))
+    (ad-enable-advice
+     'decode-char 'after 'twittering-add-fail-over-to-decode-char)
+    (ad-activate 'decode-char)
+    (unwind-protect
+	(condition-case err
+	    (apply 'json-read args)
+	  (error
+	   (message "Failed to parse the retrieved JSON.")
 	   nil))
       (ad-disable-advice 'decode-char 'after
 			 'twittering-add-fail-over-to-decode-char)
@@ -5402,24 +5432,25 @@ To convert a JSON object from a search timeline, use
   (let ((user-data (cdr (assq 'user json-object))))
     `(,@(twittering-extract-common-element-from-json json-object)
       ,@(let ((symbol-table
-	       '((id_str . id)
+	       '((favorited . favorited)
+		 (id_str . id)
 		 (in_reply_to_screen_name . in-reply-to-screen-name)
 		 (in_reply_to_status_id_str . in-reply-to-status-id)
-		 (recipient_screen_name . recipient-screen-name))))
+		 (recipient_screen_name . recipient-screen-name)
+		 (truncated . truncated))))
 	  (remove nil
 		  (mapcar
 		   (lambda (entry)
 		     (let* ((sym (car entry))
 			    (value (cdr entry))
+			    (value
+			     (if (and (memq sym '(favorited truncated))
+				      (eq value :json-false))
+				 nil
+			       value))
 			    (dest (cdr (assq sym symbol-table))))
-		       (cond
-			(dest
-			 (when value
-			   `(,dest . ,value)))
-			((memq sym '(favorited truncated))
-			 `(,sym . ,(if (eq value :json-false)
-				       nil
-				     t))))))
+		       (when (and dest value)
+			 `(,dest . ,value))))
 		   json-object)))
       ;; source
       ,@(let ((source (cdr (assq 'source json-object))))
@@ -5447,15 +5478,10 @@ To convert a JSON object from a search timeline, use
 			    (let* ((sym (car entry))
 				   (value (cdr entry))
 				   (value
-				    (cond
-				     ((eq sym 'protected)
-				      (if (eq value :json-false)
-					  nil
-					t))
-				     ((eq value :json-false)
-				      nil)
-				     (t
-				      value))))
+				    (if (and (eq sym 'protected)
+					     (eq value :json-false))
+					nil
+				      value)))
 			      (when value
 				(let ((dest (cdr (assq sym symbol-table))))
 				  (when dest
@@ -5470,7 +5496,8 @@ To convert a JSON object from other timelines, use
   `(,@(twittering-extract-common-element-from-json json-object)
     ,@(let ((symbol-table
 	     '((id_str . id)
-	       (to_user . recipient-screen-name)
+	       (to_user . in-reply-to-screen-name)
+	       (in_reply_to_status_id_str . in-reply-to-status-id)
 	       ;; user data
 	       (from_user_id_str . user-id)
 	       (profile_image_url . user-profile-image-url)
@@ -5498,6 +5525,52 @@ To convert a JSON object from other timelines, use
 		  (source-uri . ,uri)))
 	    `((source . ,source)
 	      (source-uri . ""))))))
+
+(defun twittering-json-object-to-a-status-on-direct-messages (json-object)
+  "Convert JSON-OBJECT representing a tweet into an alist representation.
+JSON-OBJECT must originate in timelines related to direct messages.
+To convert a JSON object from other timelines, use
+`twittering-json-object-to-a-status'."
+  `(,@(twittering-extract-common-element-from-json json-object)
+    ,@(let ((symbol-table
+	     '((id_str . id)
+	       (recipient_screen_name . recipient-screen-name))))
+	(remove nil
+		  (mapcar
+		   (lambda (entry)
+		     (let* ((sym (car entry))
+			    (value (cdr entry))
+			    (dest (cdr (assq sym symbol-table))))
+		       (when (and dest value)
+			 `(,dest . ,value))))
+		   json-object)))
+    ;; sender
+    ,@(let ((symbol-table
+	     '((id_str . user-id)
+	       (name . user-name)
+	       (profile_image_url . user-profile-image-url)
+	       (protected . user-protected)
+	       (screen_name . user-screen-name))))
+	(remove nil
+		(mapcar
+		 (lambda (entry)
+		   (let* ((sym (car entry))
+			  (value (cdr entry))
+			  (value
+			   (cond
+			    ((eq sym 'protected)
+			     (if (eq value :json-false)
+				 nil
+			       t))
+			    ((eq value :json-false)
+			     nil)
+			    (t
+			     value))))
+		     (when value
+		       (let ((dest (cdr (assq sym symbol-table))))
+			 (when dest
+			   `(,dest . ,value))))))
+		 (cdr (assq 'sender json-object)))))))
 
 ;;;;
 ;;;; List info retrieval
