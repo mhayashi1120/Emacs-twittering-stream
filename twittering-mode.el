@@ -3904,11 +3904,16 @@ Statuses are stored in ascending-order with respect to their IDs."
       (when (buffer-live-p buffer)
         (with-current-buffer buffer
           (let ((status (twittering-find-status base-id)))
-            (message "Done fetching reply to %s" 
-                     (cdr (assq 'text status)))
-            ;;TODO if there is more reply status, retrieving sequentially?
-            ;; (twittering-get-replied-statuses buffer id)
-            ))))))
+            (cond
+             ((twittering-find-status id)
+              (ding)
+              (message "Done fetching reply to %s" 
+                       (cdr (assq 'text status))))
+             (t
+              (let ((visible-bell t))
+                (ding))
+              (message "Unable fetching reply to %s"
+                       (cdr (assq 'text status)))))))))))
 
 (defun twittering-add-statuses-to-timeline-data (statuses &optional spec)
   (let* ((spec (or spec (twittering-current-timeline-spec)))
