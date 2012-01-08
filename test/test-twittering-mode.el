@@ -712,3 +712,114 @@
       oauth-params))
    "OAuth oauth_nonce=\"oElnnMTQIZvqvlfXM56aBLAf5noGD0AQR3Fmi7Q6Y\",oauth_signature_method=\"HMAC-SHA1\",oauth_timestamp=\"1272325550\",oauth_consumer_key=\"GDdmIQH6jhtmLUypg82g\",oauth_token=\"819797-Jxq8aYUDRmykzVKrgoLhXSq67TEa5ruc4GJC2rWimw\",oauth_version=\"1.0\",oauth_signature=\"yOahq5m0YjDDjfjxHaXEsW9D%2BX0%3D\"")
   )
+
+(defun find-least-unsupported-code-point (from to)
+  (let ((n from)
+        (c nil))
+    (while (and (<= n to)
+		(decode-char 'ucs n))
+      (setq n (1+ n)))
+    (when (<= n to)
+      n)))
+
+(defun encode-char-for-json (code-point)
+  ;; According to RFC4627 http://www.ietf.org/rfc/rfc4627 ,
+  ;; characters in the Basic Multilingual Plane (U+0000
+  ;; through U+FFFF) are escaped as
+  ;; "a six-character sequence: a reverse solidus, followed
+  ;;  by the lowercase letter u, followed by four hexadecimal
+  ;;  digits that encode the character's code point."
+  ;; "To escape an extended character that is not in the Basic
+  ;;  Multilingual Plane, the character is represented as a
+  ;;  twelve-character sequence, encoding the UTF-16 surrogate
+  ;;  pair."
+  (cond
+   ((< code-point #xFFFF)
+    (format "\\u%04X" code-point))
+   (t
+    ;; a character not in the Basic Multilingual Plane
+    (let* ((c (decode-char 'ucs unsupported-code-point))
+	   (str (encode-coding-char c 'utf-16be)))
+      (apply 'format "\\u%02X%02X\\u%02X%02X"
+	     (string-to-list str))))))
+
+(defun test-read-json-with-unsupported-code-point ()
+  (let ((unsupported-code-point
+	 (or (find-least-unsupported-code-point #x0000 #xD7FF)
+	     (find-least-unsupported-code-point #xE000 #x10FFFF))))
+    (cond
+     ((null unsupported-code-point)
+      t)
+     (t
+      (let* ((str (encode-char-for-json unsupported-code-point))
+	     (quoted-str (concat "\"" str "\""))
+	     (result (with-temp-buffer
+		       (insert quoted-str)
+		       (goto-char (point-min))
+		       (condition-case err
+			   (twittering-json-read)
+			 (error
+			  nil)))))
+	(if (and result
+		 (stringp result)
+		 (string= result
+			  (string twittering-unicode-replacement-char)))
+	    t
+	  (format "failed to decode %s!" quoted-str)))))))
+
+(when (require 'json nil t)
+  (defcase test-json-read nil nil
+    (test-assert-eq t (test-read-json-with-unsupported-code-point))))
+
+(defun test-read-xml-with-unsupported-code-point ()
+  (let ((unsupported-code-point
+	 (or (find-least-unsupported-code-point #x0000 #xD7FF)
+	     (find-least-unsupported-code-point #xE000 #x10FFFF))))
+    (cond
+     ((null unsupported-code-point)
+      t)
+     (t
+      (let* ((xml-template
+	      ;; example from http://www.w3.org/TR/xhtml1/#strict
+	      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">
+<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\" lang=\"en\">
+  <head>
+    <title>test</title>
+  </head>
+  <body>
+    <p>%s</p>
+  </body>
+</html>")
+	     (encoded-str (format "&#%d;" unsupported-code-point))
+	     (xml-str (format xml-template encoded-str))
+	     (replacement-str
+	      (string twittering-unicode-replacement-char))
+	     (result
+	      (with-temp-buffer
+		(insert xml-str)
+		(condition-case err
+		    (let* ((xml
+			    (twittering-xml-parse-region (point-min)
+							 (point-max)))
+			   (str
+			    (elt (assq 'p (assq 'body (assq 'html xml))) 2)))
+		      (if (< emacs-major-version 22)
+			  ;; On Emacs 21, `xml-parse-region' does not resolve
+			  ;; numeric character references.
+			  (twittering-decode-entities-after-parsing-xml str)
+			str))
+		  (error
+		   nil))))
+	     (expected-result replacement-str))
+	(cond
+	 ((null result)
+	  (format "failed to decode %s with an error" encoded-str))
+	 ((equal result expected-result)
+	  t)
+	 (t
+	  (format "failed to decode %s without errors" encoded-str))))))))
+
+(when (require 'xml nil t)
+  (defcase test-xml-parse nil nil
+    (test-assert-eq t (test-read-xml-with-unsupported-code-point))))

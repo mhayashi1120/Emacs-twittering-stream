@@ -2869,7 +2869,8 @@ like following:
 	   "\n"
 	   "  Input the PIN code "
 	   (propertize "at the below minibuffer." 'face 'bold))))
-    (when request-token-alist
+    (cond
+     (request-token-alist
       (with-temp-buffer
 	(switch-to-buffer (current-buffer))
 	(let* ((str-height (length (split-string str "\n")))
@@ -2891,7 +2892,10 @@ like following:
 	    (twittering-oauth-exchange-request-token
 	     access-token-url
 	     consumer-key consumer-secret
-	     request-token request-token-secret verifier)))))))
+	     request-token request-token-secret verifier)))))
+     (t
+      (error "Failed to retrieve a request token")
+      nil))))
 
 (defun twittering-xauth-get-access-token (access-token-url consumer-key consumer-secret username password)
   (let ((auth-str
@@ -2992,7 +2996,13 @@ like following:
   (require 'epa nil t)
   (require 'alpaca nil t))
 (defun twittering-read-from-encrypted-file (file)
+  "Decrypt contents from FILE and return them.
+Read encrypted contents from FILE and return the decrypted contents.
+This function requires `epa' or `alpaca' library."
   (cond
+   ((not (file-readable-p file))
+    (error "Failed to read %s" file)
+    nil)
    ((require 'epa nil t)
     (let ((context (epg-make-context epa-protocol))
 	  ;; Bind `default-directory' to the temporary directory
@@ -3007,7 +3017,12 @@ like following:
 	     (format "Decrypting %s..." (file-name-nondirectory file))))
       (message "Decrypting %s..." (file-name-nondirectory file))
       (condition-case err
-	  (epg-decrypt-file context file nil)
+	  (let ((full-path (expand-file-name file)))
+	    ;; `epg-decrypt-file' included in EasyPG 1.0.0, which is
+	    ;; distributed with Emacs 23.2, requires the expanded full path
+	    ;; as the argument CIPHER. This is because CIPHER is directly
+	    ;; used as an argument of the command `gpg'.
+	    (epg-decrypt-file context full-path nil))
 	(error
 	 (message "%s" (cdr err))
 	 nil))))
