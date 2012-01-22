@@ -7540,6 +7540,7 @@ If INTERRUPT is non-nil, the iteration is stopped if FUNC returns nil."
 	(when interactive
 	  (cond
            ((not (twittering-have-replied-statuses-p base-id))
+            (ding)
             (message "This status is not a reply."))
            (twittering-default-retrieving-replied-tweets
             (message "Fetching the status this replies..."))
