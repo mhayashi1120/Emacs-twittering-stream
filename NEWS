@@ -15,6 +15,11 @@
   is equivalent to the following one;
   (setq twittering-edit-skeleton-footer " [footer]")
   (setq twittering-edit-skeleton 'footer)
+* Obsolete variable `twittering-scroll-mode'
+  The variable `twittering-scroll-mode' is obsolete. The current
+  version of twittering-mode always behaves as the previous version
+  does on scroll-mode. To track the latest tweet, put the cursor on
+  the header or footer that is rendered on the latest end.
 
 ### Improvements
 * Edit skeleton according to the current timeline.
@@ -123,6 +128,55 @@
   a tweet on a search timeline replies to. If so, replied tweets can
   be displayed by `twittering-toggle-show-replied-statuses' bound to
   "r" in default.
+* Header and footer on a timeline buffer.
+  On a timeline buffer, the header and footer are rendered. They are
+  special field and do not correspond to tweets. If you press the
+  enter key (or invoking `twittering-enter') on the header or footer,
+  the timeline buffer will be extended by retrieving more tweets
+  according to whether the cursor is placed on the latest end or
+  oldest one.
+  You can track the latest tweet by putting the cursor on the latest
+  side of the header and footer.
+  You can customize the header and footer strings with the variables
+  `twittering-timeline-header' and `twittering-timeline-footer',
+  respectively. Their face can also be customized with the variables
+  `twittering-timeline-header-face' and
+  `twittering-timeline-footer-face'.
+* Support for exclude-if timelines.
+  ":exclude-if/FUNC/SPEC" is added as a new timeline spec. The
+  timeline equals SPEC, except that it does not include tweets that
+  the function FUNC returns non-nil for. FUNC is a lambda expression
+  that receives an alist corresponding to a tweet as an argument. You
+  can specify any timeline spec for SPEC. For example, you can ignore
+  tweets including "WORD" from the home  timeline by the following
+  timeline spec; ":exclude-if/(lambda (tweet) (string-match \"WORD\"
+  (cdr (assq 'text tweet))))/:home".
+* Support for merge timelines.
+  Merge timelines such as "(SPEC1+SPEC2)" or "(SPEC1+SPEC2+SPEC3)" and
+  so on, are added as new timeline specs. The merge timeline consists
+  of all tweets in the specified timelines. You can specify any
+  timeline spec for constituents. For example, you can see all direct
+  messages, which you have sent or received, on a buffer by the
+  following timeline spec;
+  "(:direct_messages+:direct_messages_sent)".
+* New hook invoked when rendering tweets.
+  A new hook variable `twittering-new-tweets-rendered-hook' is
+  added. The hook is invoked when new tweets are rendered. It is not
+  invoked when rendering tweets that are retrieved formerly. Since the
+  existing hook `twittering-new-tweets-hook' is invoked for each
+  successful retrieval of tweets, it may be invoked for tweets that
+  are not rendered in composite timelines such as exclude-if and merge
+  timelines. The new hook works well for composite timelines.
+  In the new hook, you can use `twittering-rendered-new-tweets' as a
+  list of new tweets. `twittering-rendered-new-tweets-spec' and
+  `twittering-rendered-new-tweets-spec-string' can be used as the
+  timeline spec and the timeline spec string. For detail, see the
+  docstring of the new hook variable.
+* New hook invoked after initializing global variables.
+  A new hook variable `twittering-mode-init-hook' is added. The hook
+  is invoked after initializing global variables. Unlike
+  `twittering-mode-hook', which is invoked every time a buffer is
+  generated for twittering-mode, the new hook invoked only once.
 
 ### Bug fixes
 * Fix of displaying a message of authorization.
@@ -164,6 +218,11 @@
   did not appear when the motion was based on display line. The bug
   has been fixed.
   Thanks to lemit who reported the problem.
+* Deletion of a tweet from a buffer after the API is succeeded.
+  A tweet is deleted from a buffer after receiving a successful
+  response of the `destroy-status' API. If the API ends in failure,
+  you can try to delete the status again because the status remains on
+  the buffer.
 
  2.0.0: 2011-04-22
 ------------------

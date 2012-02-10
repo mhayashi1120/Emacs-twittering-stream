@@ -105,22 +105,6 @@
   (test-assert-ok twittering-icon-mode)
   )
 
-(defcase test-scroll-mode nil nil
-  (setq twittering-scroll-mode nil)
-  (twittering-scroll-mode)
-  (test-assert-ok twittering-scroll-mode)
-  (twittering-scroll-mode)
-  (test-assert-ok (not twittering-scroll-mode))
-  (twittering-scroll-mode nil)
-  (test-assert-ok twittering-scroll-mode)
-  (twittering-scroll-mode t)
-  (test-assert-ok twittering-scroll-mode)
-  (twittering-scroll-mode 1)
-  (test-assert-ok twittering-scroll-mode)
-  (twittering-scroll-mode -1)
-  (test-assert-ok (not twittering-scroll-mode)))
-  
-
 (defcase test-percent-encode nil nil
   (test-assert-string-equal "Rinko"
     (twittering-percent-encode "Rinko"))
@@ -251,6 +235,37 @@
     ":filter/\\\\/user/mylist"
     '(filter "\\\\" (list "user" "mylist"))
     '(filter "\\\\" (list "user" "mylist")))
+   '(t t))
+
+  (test-assert-equal
+   (test-restore-timeline-spec
+    ":exclude-if/(lambda (x) t)/:home"
+    '(exclude-if (lambda (x) t) (home))
+    '(exclude-if (lambda (x) t) (home)))
+   '(t t))
+
+  (test-assert-equal
+   (test-restore-timeline-spec
+    ":exclude-if/(lambda (tweet) (string-match \"test\\\\.\" (cdr (assq 'text tweet))))/@"
+    '(exclude-if (lambda (tweet)
+		   (string-match "test\\." (cdr (assq 'text tweet))))
+		 (replies))
+    '(exclude-if (lambda (tweet)
+		   (string-match "test\\." (cdr (assq 'text tweet))))
+		 (replies)))
+   '(t t))
+
+  (test-assert-equal
+   (test-restore-timeline-spec
+    ":exclude-if/(lambda (tweet) (string-match \"\\\\\\\\\" (cdr (assq 'text tweet))))/:exclude-if/(lambda (tw) (assq 'retweeting-id tw))/user/mylist"
+    '(exclude-if (lambda (tweet)
+		   (string-match "\\\\" (cdr (assq 'text tweet))))
+		 (exclude-if (lambda (tw) (assq 'retweeting-id tw))
+			     (list "user" "mylist")))
+    '(exclude-if (lambda (tweet)
+		   (string-match "\\\\" (cdr (assq 'text tweet))))
+		 (exclude-if (lambda (tw) (assq 'retweeting-id tw))
+			     (list "user" "mylist"))))
    '(t t))
 
   (test-assert-equal

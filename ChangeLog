@@ -1,3 +1,198 @@
+2012-02-06  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Delete a specified status from composite
+	timeline buffers.
+	(twittering-get-dependent-timeline-specs): new function.
+	(twittering-delete-status-from-data-table): delete the given
+	status from buffers bound to composite timelines.
+
+	* twittering-mode.el: Decode a HTTP response body before invoking
+	a sentinel.
+	(twittering-decode-response-body): new function.
+	(twittering-send-http-request): decode the response body by
+	`twittering-decode-response-body' before invoking the sentinel.
+	(twittering-http-get-default-sentinel): do not decode the response
+	body here.
+
+	* twittering-mode.el: Delete a status after the successful
+	response for the `destroy-status' API is received.
+	(twittering-http-post-destroy-status-sentinel): new function.
+	(twittering-call-api): use the new function
+	`twittering-http-post-destroy-status-sentinel' as the sentinel of
+	`twittering-http-post' for the command `destroy-status'.
+	(twittering-delete-status): do not delete the specified status
+	here.
+
+	* twittering-mode.el: `twittering-render-a-field' moves the
+	cursor even if the given status is not rendered.
+	(twittering-render-a-field): move the cursor even if the given
+	status is not rendered.
+
+	* twittering-mode.el: Do not use the return value of the function
+	`twittering-render-a-field'.
+	(twittering-render-timeline): do not use the return value of
+	`twittering-render-a-field'.
+	(twittering-show-replied-statuses): likewise.
+
+	* twittering-mode.el: `twittering-render-a-field' returns nil if
+	the status is not rendered.
+	(twittering-render-a-field): return nil if the status is not
+	rendered.
+	(twittering-render-timeline): show replied statuses only if the
+	status is rendered.
+
+	* twittering-mode.el: Add a docstring for
+	`twittering-render-timeline'.
+	(twittering-render-timeline): add a docstring.
+
+	* twittering-mode.el: Add `twittering-rerender-timeline-all' that
+	re-renders tweets after clearing the buffer.
+	(twittering-render-timeline): modify arguments.
+	(twittering-rerender-timeline-all): new function.
+	(twittering-get-managed-buffer): replace the invocation of the
+	function `twittering-render-timeline' with that of the function
+	`twittering-rerender-timeline-all'.
+	(twittering-icon-mode): likewise.
+	(twittering-toggle-reverse-mode): likewise.
+	(twittering-erase-old-statuses): likewise.
+
+	* twittering-mode.el: Add a new hook
+	`twittering-new-tweets-rendered-hook'.
+	(twittering-rendered-new-tweets-spec): new variable.
+	(twittering-rendered-new-tweets-spec-string): new variable.
+	(twittering-rendered-new-tweets): new variable.
+	(twittering-new-tweets-rendered-hook): new hook.
+	(twittering-http-get-default-sentinel): call
+	`twittering-render-timeline' with non-nil INVOKE-HOOK.
+	(twittering-add-statuses-to-timeline-data): likewise.
+	(twittering-render-timeline): add a new argument INVOKE-HOOK.
+	(twittering-rerender-timeline-all): call
+	`twittering-render-timeline' with nil INVOKE-HOOK.
+
+	* twittering-mode.el: Unread status notifier uses the new hook
+	invoked when rendering tweets. This corrects the number of unread
+	statuses on composite timelines.
+	(twittering-update-unread-status-info): modified for use in
+	`twittering-new-tweets-rendered-hook'.
+	(twittering-enable-unread-status-notifier): use
+	`twittering-new-tweets-rendered-hook' instead of
+	`twittering-new-tweets-hook'.
+
+	* twittering-mode.el: Add a new hook `twittering-mode-init-hook'.
+	The new hook is invoked after initializing global variables.
+	(twittering-mode-init-hook): new hook invoked after initializing
+	global variables.
+	(twittering-mode-hook): add a docstring.
+	(twittering-initialize-global-variables-if-necessary): invoke
+	hooks specified by `twittering-mode-init-hook'.
+
+2012-01-29  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Follow the header conventions. Thanks to
+	Jonas Bernoulli who reported the nonfulfillment.
+
+	* twittering-mode.el: Expand a path before calling the function
+	`alpaca-after-find-file'.
+	(twittering-read-from-encrypted-file): expand FILE into a full
+	path. Since "alpaca.el" uses the `buffer-file-name' as the prefix
+	of the temporary file, it must be a full path.
+
+	* twittering-mode.el: Add a new argument of the function
+	`twittering-render-a-field' for rendering a tweet without a
+	separator.
+	(twittering-render-a-field): add a new argument for rendering a
+	tweet without a separator.
+
+	* twittering-mode.el: Render the header and footer line.
+	(twittering-make-field-id-of-timeline-oldest-end): new function.
+	(twittering-make-field-id-of-timeline-latest-end): new function.
+	(twittering-field-id-is-timeline-oldest-end): new function.
+	(twittering-field-id-is-timeline-latest-end): new function.
+	(twittering-render-timeline): render the header and footer on
+	rendering the whole of the buffer. In that case, the function now
+	moves the cursor to the normal field not to the header nor
+	footer.
+	(twittering-mode-map): bind "G" to `twittering-goto-last-status'
+	instead of `end-of-buffer'.
+	(twittering-enter): update the timeline when the function is
+	invoked on the header or footer.
+	(twittering-goto-last-status): new function.
+	(twittering-get-last-status-head): new function.
+	(twittering-goto-first-normal-field): new function.
+	(twittering-goto-last-normal-field): new function.
+	(twittering-get-first-normal-field-head): new function.
+	(twittering-get-last-normal-field-head): new function.
+	(twittering-goto-next-status): move the cursor to the normal field
+	before instruction for updating the timeline.
+	(twittering-goto-previous-status): likewise.
+
+	* twittering-mode.el: Add variables for customizing the header and
+	footer.
+	(twittering-timeline-header-face): new variable.
+	(twittering-timeline-footer-face): new variable.
+	(twittering-timeline-header): new variable.
+	(twittering-timeline-footer): new variable.
+	(twittering-render-timeline): render the header and footer
+	according to the customization variables.
+	(twittering-initialize-global-variables-if-necessary): initialize
+	the faces for the header and footer.
+
+	* twittering-mode.el: The current version of twittering-mode
+	always behaves as the previous version does on scroll-mode. The
+	variable `twittering-scroll-mode' is obsolete.
+	(twittering-scroll-mode): removed.
+	(twittering-mode-line-buffer-identification): ignore the obsolete
+	variable `twittering-scroll-mode'.
+	(twittering-render-timeline): remove expressions for restoring
+	positions on non-scroll-mode.
+	(twittering-mode-map): do not bind "s" to the function
+	`twittering-scroll-mode'.
+	(twittering-mode-setup): do not call `make-local-variable' for the
+	variable `twittering-scroll-mode'.
+	* test/test-twittering-mode.el: Remove tests related to the
+	scroll-mode.
+
+	* twittering-mode.el: Remove invalid timeline specs from the
+	history after the failure of the retrieval.
+	(twittering-http-get-default-sentinel): remove the specified
+	timeline spec string from the history after it becomes clear that
+	the spec is invalid.
+	(twittering-remove-timeline-spec-string-from-history): new
+	function.
+	(twittering-get-managed-buffer): add the requested timeline spec
+	string to the history. It may be removed from the history after if
+	it is invalid.
+
+	* twittering-mode.el: Support ":exclude-if/FUNC/SPEC" timelines.
+	(twittering-http-get-default-sentinel): remove timeline spec
+	strings depending the invalid spec.
+	(twittering-timeline-spec-to-string): support the new timeline
+	spec ":exclude-if/FUNC/SPEC".
+	(twittering-extract-timeline-spec): likewise.
+	(twittering-timeline-spec-composite-p): new function.
+	(twittering-timeline-spec-depending-on-p): new function.
+	(twittering-get-base-timeline-specs): new function.
+	(twittering-get-primary-base-timeline-specs): new function.
+	(twittering-generate-composite-timeline): new function.
+	(twittering-current-timeline-referring-id-table): support the new
+	timeline spec ":exclude-if/FUNC/SPEC".
+	(twittering-current-timeline-data): likewise.
+	(twittering-add-statuses-to-timeline-data): update composite
+	timelines that depend on the primary timeline.
+	(twittering-get-and-render-timeline): add new arguments SPEC and
+	SPEC-STRING to retrieve timelines that have no buffers but
+	constitute some composite timelines.
+	* test/test-twittering-mode.el: Add tests for the timeline spec
+	":exclude-if/FUNC/SPEC".
+
+	* twittering-mode.el: Support merge timelines.
+	(twittering-timeline-spec-composite-p): support the merge timeline
+	spec.
+	(twittering-get-base-timeline-specs): likewise.
+	(twittering-generate-composite-timeline): likewise.
+	(twittering-current-timeline-referring-id-table): likewise.
+	(twittering-current-timeline-data): likewise.
+
 2012-01-14  Tadashi MATSUO  <tad@mymail.twin.jp>
 
 	* twittering-mode.el: Do not record the edit buffer in the list of

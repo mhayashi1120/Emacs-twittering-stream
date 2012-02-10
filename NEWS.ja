@@ -15,6 +15,11 @@
   は、以下の設定で置き換えられます。
   (setq twittering-edit-skeleton-footer " [footer]")
   (setq twittering-edit-skeleton 'footer)
+* 変数`twittering-scroll-mode'の廃止
+  変数`twittering-scroll-mode'は廃止されました。現在の版は、過去の版で
+  scroll-modeが有効であったときのように振舞います。最新のtweetに追従す
+  るには、timelineバッファの最新側のヘッダもしくはフッタ上にカーソルを
+  置いてください。
 
 ### 改良
 * 現在のtimelineに応じたedit skeleton
@@ -122,6 +127,52 @@
   のIDが取得できるようになりました。`json.el'が使用可能であれば関数
   `twittering-toggle-show-replied-statuses'(デフォルトでは"r"にbindさ
   れています)を呼び出すことで返信先tweetを表示できます。
+* ヘッダとフッタの表示
+  timelineバッファにヘッダとフッタが表示されるようになりました。これら
+  はtweetとは独立の特別な行として描画されます。ヘッダやフッタ上でEnter
+  キーを押す(もしくは`twittering-enter'を実行する)と、それがtimelineの
+  時系列で最新の側か過去の側かに応じてtweetを取得して描画します。
+  また、ヘッダとフッタの内の最新側にカーソルを置いておくと、常にカーソ
+  ル行の近くに最新tweetを描画するようにできます。
+  ヘッダ、フッタとして表示される文字列は、`twittering-timeline-header'、
+  `twittering-timeline-footer'という変数で変更できます。また、表示する
+  際のfaceは`twittering-timeline-header-face'と
+  `twittering-timeline-footer-face'で変更できます。
+* exclude-if timelineに対応
+  新しく":exclude-if/FUNC/SPEC"というtimelineに対応しました。この
+  timelineはSPECで表されるものとほぼ同じですが、関数FUNCがnon-nilを返
+  すようなtweetは除外されている点が異なります。関数FUNCはひとつのtweet
+  に対応した連想リストをひとつ受け取るλ式で指定します。SPECには任意の
+  timeline specを指定できます。例えば、home timelineから"WORD"を含む
+  tweetを除外したtimelineは下記のtimeline specで指定できます。
+  ":exclude-if/(lambda (tweet) (string-match \"WORD\" (cdr (assq 'text
+  tweet))))/:home"
+* merge timelineに対応
+  新しく"(SPEC1+SPEC2)"や"(SPEC1+SPEC2+SPEC3)"といった形式のtimelineに
+  対応しました。merge timelineは指定したtimelineのtweetを全て含む
+  timelineです。任意のtimeline specを構成要素にできます。例えば、
+  "(:direct_messages+:direct_messages_sent)"というtimeline specを使え
+  ばこれまでに送ったり受け取ったりしたdirect messageの全てをひとつのバッ
+  ファに表示できます。
+* tweet描画時に実行される新しいhookの追加
+  新しいhook変数`twittering-new-tweets-rendered-hook'を追加しました。
+  このhookは実際に新しいtweetを描画したときに実行されます。以前に取得
+  したtweetを再描画する際には実行されません。既存のhook変数
+  `twittering-new-tweets-hook'はtweetの取得に成功するたびに実行される
+  ので、exclude-if timelineやmerge timelineのような複合timelineに含ま
+  れる実際には描画されないtweetについてもhookを実行します。新しいhook
+  は複合timelineについてもうまく動作します。
+  hook内では、`twittering-rendered-new-tweets'という変数で描画された
+  tweetのリストを参照できます。他にも描画されたtimelineを表すtimeline
+  specとtimeline spec文字列を`twittering-rendered-new-tweets-spec'と
+  `twittering-rendered-new-tweets-spec-string'という変数で参照できます。
+  詳細は`twittering-new-tweets-rendered-hook'のdocstringを参照してくだ
+  さい。
+* 大域変数初期化時に実行される新しいhookの追加
+  新しいhook変数`twittering-mode-init-hook'を追加しました。このhookは
+  大域変数を初期化した後に実行されます。twittering-mode用のbufferを作
+  成するたびに実行される`twittering-mode-hook'とは異なり、新しいhookは
+  一度しか実行されません。
 
 ### バグ修正
 * 認証成功・失敗についてのメッセージが表示されるよう修正
@@ -160,6 +211,10 @@
   での論理行単位のカーソル移動がおかしくなっていました。この問題を解消
   しました。
   Thanks to lemit who reported the problem.
+* bufferからtweetを消すのをtweet削除APIが成功した後に変更
+  bufferからtweetを消去するタイミングを`destroy-status' APIが成功した
+  という応答を受け取った後に変更しました。APIが失敗に終わった場合、
+  対象tweetはbufferに残っているので再度削除を試みることができます。
 
  2.0.0: 2011-04-22
 ------------------
