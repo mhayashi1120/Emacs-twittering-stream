@@ -210,6 +210,14 @@
 	    (public)))
    '(t t))
 
+  ;; Duplicates in a merge timeline are removed.
+  (test-assert-equal
+   (test-restore-timeline-spec
+    "(ABC+user/mylist+user/mylist+ABC)"
+    '(merge (user "ABC") (list "user" "mylist"))
+    '(merge (user "ABC") (list "user" "mylist")))
+   '(t t))
+
   (test-assert-equal
    (test-restore-timeline-spec
     ":filter/ABC/user/mylist"
@@ -304,6 +312,20 @@
     '(list "USER" "non-ASCIIリスト")
     '(list "USER" "non-ASCIIリスト"))
    '(t t))
+  )
+
+(defcase timeline-spec-dependence nil nil
+  ;; Duplicates in a merge timeline are removed.
+  (test-assert-equal
+   (let ((spec (twittering-string-to-timeline-spec "(:home+@+(@+:home))")))
+     (twittering-get-primary-base-timeline-specs spec))
+   '((home) (replies)))
+
+  (test-assert-equal
+   (let ((spec (twittering-string-to-timeline-spec
+		"(:home+@+:exclude-if/(lambda (x) t)/(@+:home+USER))")))
+     (twittering-get-primary-base-timeline-specs spec))
+   '((home) (replies) (user "USER")))
   )
 
 (defun format-status (status format-str)

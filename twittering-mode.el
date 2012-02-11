@@ -3895,11 +3895,12 @@ Return cons of the spec and the rest string."
 	  (setq rest next-rest)))
       (if (and rest (string-match "^)" rest))
 	  (let ((spec-list
-		 (apply 'append
-			(mapcar (lambda (x) (if (eq 'merge (car x))
-						(cdr x)
-					      (list x)))
-				(reverse result)))))
+		 (twittering-remove-duplicates
+		  (apply 'append
+			 (mapcar (lambda (x) (if (eq 'merge (car x))
+						 (cdr x)
+					       (list x)))
+				 (reverse result))))))
 	    (if (= 1 (length spec-list))
 		`(,(car spec-list) . ,(substring rest 1))
 	      `((merge ,@spec-list) . ,(substring rest 1))))
@@ -4013,9 +4014,10 @@ If SPEC is primary, returns a list consisting of itself.
 The result timelines are primary."
   (if (twittering-timeline-spec-primary-p spec)
       `(,spec)
-    (apply 'append
-	   (mapcar 'twittering-get-primary-base-timeline-specs
-		   (twittering-get-base-timeline-specs spec)))))
+    (twittering-remove-duplicates
+     (apply 'append
+	    (mapcar 'twittering-get-primary-base-timeline-specs
+		    (twittering-get-base-timeline-specs spec))))))
 
 (defun twittering-get-dependent-timeline-specs (base-spec)
   "Return a list of timeline specs that depend on BASE-SPEC.
@@ -8753,7 +8755,8 @@ instead."
 	      (make-overlay 1 1 nil nil nil))))
     (add-text-properties 0 (length help-str) '(face font-lock-comment-face)
 			 help-str)
-    (overlay-put help-overlay 'before-string help-str)
+    (overlay-put help-overlay 'after-string help-str)
+    (overlay-put help-overlay 'priority 1000)
     (setq twittering-help-overlay help-overlay)))
 
 (defun twittering-edit-close ()
@@ -9723,7 +9726,7 @@ the ID of the status rendered before the separator. The default value of POS
 is `(point)'."
   (let ((pos (or pos (point))))
     (or (get-text-property pos 'id)
-	(let ((prev (or (twittering-get-previous-status-head pos)
+	(let ((prev (or (twittering-get-current-status-head pos)
 			(point-min))))
 	  (and prev (get-text-property prev 'id))))))
 
@@ -9735,7 +9738,8 @@ by the separator.
 Return POS if no statuses are rendered."
   (let* ((pos (or pos (point)))
 	 (field-id (get-text-property pos 'field))
-	 (head (field-beginning pos)))
+	 ;; Find the beginning of the field regardless of stickiness.
+	 (head (field-beginning pos t)))
     (cond
      ((null field-id)
       ;; A separator is rendered at `pos'.
@@ -9745,10 +9749,15 @@ Return POS if no statuses are rendered."
 	  head
 	;; In the case that `pos' points to a character of the separator,
 	;; but not to the head of the separator.
-	(field-beginning head)))
+	(field-beginning head t)))
      ((null (get-text-property head 'field))
       ;; When `head' points to a separator, `pos' points to the head
       ;; of a status.
+      pos)
+     ((not (twittering-field-id= field-id (get-text-property head 'field)))
+      ;; When `pos' points to the beginning of the field and it also
+      ;; points to the end of the previous field, `head' points to the
+      ;; head of the previous status.
       pos)
      (t
       head))))
