@@ -80,13 +80,13 @@
     (remove-hook 'twittering-mode-hook 'twittering+tab-initialize))))
 
 (defun twittering+tab-initialize ()
-  (setq header-line-format 
+  (setq header-line-format
         '(:eval (twittering+tab-line))))
 
 (defun twittering+tab-background-propertize (string)
   (let ((end (length string)))
     (add-text-properties
-     0 end 
+     0 end
      (list
       'face (list 'twittering+tab-background)
       'mouse-face 'twittering+tab-selected-background
@@ -97,7 +97,7 @@
 (defvar twittering+tab-separator
   (let ((sep " "))
     (twittering+tab-background-propertize sep)
-    (propertize sep 'display 
+    (propertize sep 'display
                 '(space :width 0.2)))
   "String used to separate tabs.")
 
@@ -132,10 +132,10 @@ cleared by a timer.")
              (maxtabs (- (/ win-width breadth)
                          (if (< (% win-width breadth) (/ breadth 2)) 1 0)))
              (groups (twittering+tab-groups current bufs maxtabs))
-             (main-format (mapconcat 
+             (main-format (mapconcat
                            (lambda (buf)
                              (let ((name (twittering+tab-name buf breadth)))
-                               (propertize name 'face 
+                               (propertize name 'face
                                            (if (eq buf current)
                                                (list 'twittering+tab-selected)
                                              (list 'twittering+tab-unselected)))))
@@ -172,7 +172,7 @@ cleared by a timer.")
                        (propertize name 'face (list 'twittering+tab-unselected)))))
                ;; fill background to full width
                (twittering+tab-background-propertize
-                (propertize 
+                (propertize
                  (make-string win-width ?\ ))))))))
 
 (defun twittering+tab-name (buffer breadth)
@@ -214,7 +214,7 @@ cleared by a timer.")
      ((<= maxtabs index)
       ;; -|----|xxxx|-
       (let ((rev (memq current (reverse bufs))))
-        (list 
+        (list
          (car (last rev))
          (reverse (twittering-take rev maxtabs))
          (car (cdr (memq current bufs))))))
@@ -223,7 +223,7 @@ cleared by a timer.")
       ;; ----|xxxx|---
       (let ((rest (twittering-take bufs (1+ maxtabs))))
         (list nil
-              (twittering-take rest maxtabs) 
+              (twittering-take rest maxtabs)
               (car (last rest))))))))
 
 (defun twittering-take (list count)
@@ -246,9 +246,9 @@ cleared by a timer.")
               ;; create square icon fit to tab height.
               (let* ((twittering-convert-fix-size (frame-char-height))
                      (data (plist-get (cdr image) :data))
-                     (icon-data (twittering-convert-image-data 
+                     (icon-data (twittering-convert-image-data
                                  data twittering-fallback-image-format))
-                     (icon (create-image icon-data nil t 
+                     (icon (create-image icon-data nil t
                                          :margin 0
                                          :ascent 'center)))
                 (puthash name icon twittering+tab--icon-hash)
@@ -257,7 +257,7 @@ cleared by a timer.")
 (defun twittering+tab--user-image (user)
   (loop with image
         for b in (twittering-get-buffer-list)
-        if (setq image 
+        if (setq image
                  (with-current-buffer b
                    (twittering+tab--search-user-image user)))
         return image))
@@ -265,7 +265,7 @@ cleared by a timer.")
 (defun twittering+tab--search-user-image (user)
   (let ((pos (twittering-get-next-status-head (point-min)))
         user-name)
-    (while (and pos 
+    (while (and pos
                 (not (= pos (point-max)))
                 (setq user-name (twittering-get-username-at-pos pos))
                 (not (equal user-name user)))
