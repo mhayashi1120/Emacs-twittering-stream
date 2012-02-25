@@ -1,6 +1,5 @@
 ;;TODO
-;; * show unseen count or unseen existence.
-;; * show icon in tab if private TL.
+;; * show unseen count or only unseen existence.
 ;; * manipulate by mouse.
 
 (require 'twittering-mode)
@@ -86,12 +85,13 @@
 
 (defun twittering+tab-background-propertize (string)
   (let ((end (length string)))
-    (add-text-properties 0 end 
-                         (list
-                          'face (list 'twittering+tab-background)
-                          'mouse-face 'twittering+tab-selected-background
-                          'tab-separator t)
-                         string)
+    (add-text-properties
+     0 end 
+     (list
+      'face (list 'twittering+tab-background)
+      'mouse-face 'twittering+tab-selected-background
+      'tab-separator t)
+     string)
     string))
 
 (defvar twittering+tab-separator
@@ -176,17 +176,25 @@ cleared by a timer.")
                  (make-string win-width ?\ ))))))))
 
 (defun twittering+tab-name (buffer breadth)
-  (let* ((name (buffer-name buffer)))
-    (propertize
-     (cond
-      ((or (< breadth 6)
-           (<= (string-width name) breadth))
-       (truncate-string-to-width name breadth nil ?\ ))
-      (t
-       (concat (truncate-string-to-width name (- breadth 3) nil ?\ ) "...")))
-     'mouse-face (list 'twittering+tab-mouse)
-     'local-map twittering+tab-map
-     'help-echo name)))
+  (let* ((spec (buffer-local-value 'twittering-timeline-spec buffer))
+         (tab (buffer-local-value 'twittering-timeline-spec-string buffer))
+         (icon (twittering+tab-spec-icon spec))
+         icon-string)
+    (when icon
+      (setq icon-string (propertize "  " 'display icon))
+      (setq breadth (- breadth 2)))
+    (concat
+     icon-string
+     (propertize
+      (cond
+       ((or (< breadth 6)
+            (<= (string-width tab) breadth))
+        (truncate-string-to-width tab breadth nil ?\ ))
+       (t
+        (concat (truncate-string-to-width tab (- breadth 3) nil ?\ ) "...")))
+      'mouse-face (list 'twittering+tab-mouse)
+      'local-map twittering+tab-map
+      'help-echo tab))))
 
 (defun twittering+tab-groups (current bufs maxtabs)
   "(first-tab (normal-tabs) last-tab)"
@@ -225,5 +233,42 @@ cleared by a timer.")
       (setq list (cdr list))
       (incf i))
     (nreverse res)))
+
+(defvar twittering+tab--icon-hash (make-hash-table :test 'equal))
+
+(defun twittering+tab-spec-icon (spec)
+  (when (eq (car spec) 'user)
+    (let ((name (cadr spec)))
+      (or (gethash name twittering+tab--icon-hash)
+          (let ((image (twittering+tab--user-image name)))
+            (when image
+              (let* ((twittering-convert-fix-size (frame-char-height))
+                     (data (plist-get (cdr image) :data))
+                     (icon-data (twittering-convert-image-data 
+                                 data twittering-fallback-image-format))
+                     (icon (create-image icon-data nil t 
+                                         :margin 0
+                                         :ascent 'center)))
+                (puthash name icon twittering+tab--icon-hash)
+                icon)))))))
+
+(defun twittering+tab--user-image (user)
+  (loop with image
+        for b in (twittering-get-buffer-list)
+        if (setq image 
+                 (with-current-buffer b
+                   (twittering+tab--search-user-image user)))
+        return image))
+
+(defun twittering+tab--search-user-image (user)
+  (let ((pos (twittering-get-next-status-head (point-min)))
+        user-name)
+    (while (and pos 
+                (not (= pos (point-max)))
+                (setq user-name (twittering-get-username-at-pos pos))
+                (not (equal user-name user)))
+      (setq pos (twittering-get-next-status-head pos)))
+    (when pos
+      (get-text-property pos 'display))))
 
 (provide 'twittering+tab)
