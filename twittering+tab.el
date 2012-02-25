@@ -182,6 +182,7 @@ cleared by a timer.")
          icon-string)
     (when icon
       (setq icon-string (propertize "  " 'display icon))
+      ;; subtract icon width
       (setq breadth (- breadth 2)))
     (concat
      icon-string
@@ -242,6 +243,7 @@ cleared by a timer.")
       (or (gethash name twittering+tab--icon-hash)
           (let ((image (twittering+tab--user-image name)))
             (when image
+              ;; create square icon fit to tab height.
               (let* ((twittering-convert-fix-size (frame-char-height))
                      (data (plist-get (cdr image) :data))
                      (icon-data (twittering-convert-image-data 
