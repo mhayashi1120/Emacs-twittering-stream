@@ -4235,7 +4235,6 @@ Statuses are stored in ascending-order with respect to their IDs."
 		     t)
                     ((not twittering-default-retrieving-replied-tweets)
                      nil)
-                    ;;TODO lock
                     (t
                      (twittering-fetch-replied-statuses buffer status)
                      nil)))))))
@@ -4247,11 +4246,18 @@ Statuses are stored in ascending-order with respect to their IDs."
       (let ((replied-id (cdr (assq 'in-reply-to-status-id status))))
 	(and replied-id (not (string= "" replied-id)))))))
 
+(defvar twittering-fetch-replied-fetching-status
+  (make-hash-table :test 'equal))
+
 (defun twittering-fetch-replied-statuses (buffer status)
   (let* ((base-id (cdr (assq 'id status)))
          (id (cdr (assq 'in-reply-to-status-id status)))
          (user (cdr (assq 'in-reply-to-screen-name status))))
-    (unless (twittering-find-status id)
+    (cond
+     ((twittering-find-status id))
+     ((gethash id twittering-fetch-replied-fetching-status)) ;; do nothing
+     (t
+      (puthash id t twittering-fetch-replied-fetching-status)
       (twittering-call-api 
        'retrieve-timeline 
        `((timeline-spec . (user ,user))
@@ -4264,13 +4270,14 @@ Statuses are stored in ascending-order with respect to their IDs."
          (timeline-spec-string . ,user)
          (originated-buffer . ,buffer)
          (originated-id . ,base-id)
-         (target-id . ,id))))))
+         (target-id . ,id)))))))
 
 (defun twittering-fetch-replied-clean-up-sentinel (proc status connection-info)
   (when (memq status '(exit signal closed failed))
     (let ((buffer (cdr (assq 'originated-buffer connection-info)))
           (base-id (cdr (assq 'originated-id connection-info)))
           (id (cdr (assq 'target-id connection-info))))
+      (remhash id twittering-fetch-replied-fetching-status)
       (when (buffer-live-p buffer)
         (with-current-buffer buffer
           (let ((status (twittering-find-status base-id)))
@@ -9444,7 +9451,7 @@ How to edit a tweet is determined by `twittering-update-status-funcion'."
 			 '(955 12363 12431 12356 12356 12424 955)) "")))
       (twittering-call-api 'update-status `((status . ,text))))))
 
-(defun twittering-immediate-cancel-last-tweet ()
+(defun twittering-cancel-last-tweet ()
   (interactive)
   (unless twittering-last-updated-status
     (error "Cannot cancel last tweet"))
