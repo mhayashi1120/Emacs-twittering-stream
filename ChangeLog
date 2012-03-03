@@ -1,3 +1,157 @@
+2012-02-28  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Fix the function
+	`twittering-current-timeline-referring-id-table'. There was the
+	possibility that the function returns nil for a composite timeline
+	spec. This made native retweets disappear on the composite
+	timeline. Thanks to Boots_of_Lead who reported the bug.
+	(twittering-current-timeline-referring-id-table): for a composite
+	timeline spec, return the table of the first primary base spec
+	with a non-nil referring table. This function previously returned
+	the first direct base timeline spec, which might be nil.
+
+	* twittering-mode.el: Add an explanation to the docstring of
+	`twittering-new-tweets-rendered-hook'.
+	(twittering-new-tweets-rendered-hook): add an explanation to the
+	docstring.
+
+	* twittering-mode.el: Reimplement jojo-mode as a hook.
+	(twittering-add-statuses-to-timeline-data): remove statements for
+	jojo-mode.
+	(twittering-initialize-global-variables-if-necessary): add
+	`twittering-jojo-mode-hook-function' to the new tweets rendered
+	hook.
+	(twittering-jojo-mode-p): removed.
+	(twittering-update-jojo): removed.
+	(twittering-post-predicted-message-like-jojo): new function.
+	(twittering-jojo-mode-hook-function): new function.
+
+	* twittering-mode.el: Display the replied tweet on the pop-up
+	edit buffer.
+	(twittering-edit-set-help-string): new function.
+	(twittering-edit-setup-help): add a new argument REPLY-TO-ID.
+	(twittering-update-status-from-pop-up-buffer): send REPLY-TO-ID to
+	the function `twittering-edit-setup-help'.
+
+	* twittering-mode.el: Generate a description of a edited tweet by
+	`twittering-generate-format-status-function'.
+	(twittering-edit-set-help-string): do not add a text property to
+	STR.
+	(twittering-edit-setup-help): generate a description by
+	`twittering-generate-format-status-function'.
+
+	* twittering-mode.el: Render a help on a pop-up edit buffer as a
+	read-only text. The replied tweet can be copied on the edit
+	buffer. Rendering a help as a read-only text also suppresses
+	strange behavior of overlays exceeding the size of the current
+	window.
+	(twittering-help-overlay): removed.
+	(twittering-help-overlay-priority): removed.
+	(twittering-edit-help-end-pos): new variable.
+	(twittering-edit-mode): remove the parent mode to suppress
+	invocation of hooks for `text-mode'. The trick for disabling
+	font-lock mode is introduced. `twittering-edit-help-end-pos' is
+	prepared as a buffer-local variable.
+	(twittering-edit-extract-status): determine the region being
+	extracted with `twittering-edit-help-end-pos'.
+	(twittering-edit-reset-status): new function.
+	(twittering-edit-set-help-string): render a help for
+	`twittering-edit-mdoe' as a read-only text.
+	(twittering-update-status-from-pop-up-buffer): move the cursor
+	just behind the help.
+	(twittering-edit-next-history): extract the edited message by
+	`twittering-edit-extract-status' and reset it by
+	`twittering-edit-reset-status'.
+	(twittering-edit-previous-history): likewise.
+
+	* twittering-mode.el: Dynamically determine an end position of a
+	help on a pop-up edit buffer.
+	(twittering-edit-help-end-pos): removed.
+	(twittering-edit-mode): remove the variable
+	`twittering-edit-help-end-pos'.
+	(twittering-edit-get-help-end): new function, which replaces the
+	buffer-local variable `twittering-edit-help-end-pos'.
+	(twittering-edit-extract-status): use the function
+	`twittering-edit-get-help-end' instead of the variable
+	`twittering-edit-help-end-pos'.
+	(twittering-edit-reset-status): likewise.
+	(twittering-edit-set-help-string): likewise.
+	(twittering-update-status-from-pop-up-buffer): likewise.
+
+	* twittering-mode.el: Control an attribute of a tweet being edited
+	with an alist bound to `twittering-edit-mode-info'.
+	(twittering-reply-recipient): removed.
+	(twittering-edit-mode-info): new variable, which is an alist
+	specifying the attribute of the tweet being edited.
+	(twittering-update-status-from-pop-up-buffer): control the
+	attribute of the tweet being edited with the new variable
+	`twittering-edit-mode-info'.
+	(twittering-edit-post-status): determine the attribute of the
+	tweet being posted by the variable `twittering-edit-mode-info'.
+
+	* twittering-mode.el: Allow a reply where a mention is not placed
+	on the beginning.
+	(twittering-edit-post-status): allow a reply where a mention is
+	not placed on the beginning.
+	(twittering-update-status-from-minibuffer): likewise.
+
+	* twittering-mode.el: Send the cited ID to the function
+	`twittering-update-status' when editing an organic retweet.
+	(twittering-edit-skeleton-alist): mention that IN-REPLY-TO is
+	non-nil when a tweet is edited as an organic retweet.
+	(twittering-update-status-from-minibuffer): post a tweet as a
+	reply only if TWEET-TYPE is the symbol `reply'.
+	(twittering-update-status): mention that REPLY-TO-ID is non-nil
+	when a tweet cites or replies to a certain tweet.
+	(twittering-organic-retweet): send the ID of the cited tweet to
+	`twittering-update-status' as REPLY-TO-ID.
+
+	* twittering-mode.el: Generate a help on an edit buffer from the
+	buffer-local variable `twittering-edit-mode-info'.
+	(twittering-edit-setup-help): generate a help from the
+	buffer-local variable `twittering-edit-mode-info'.
+	(twittering-update-status-from-pop-up-buffer): remove obsolete
+	arguments from the invocation of `twittering-edit-setup-help'.
+
+	* twittering-mode.el: Enable to toggle a reply and a normal tweet
+	on an edit buffer.
+	(twittering-edit-mode-map): bind "C-c C-r" to
+	`twittering-edit-toggle-reply'.
+	(twittering-edit-setup-help): display a help for
+	`twittering-edit-toggle-reply'.
+	(twittering-edit-toggle-reply): new function, which toggles
+	whether the tweet being edited will be sent as a reply or not.
+
+	* twittering-mode.el: Confirm that the edited message should be
+	sent as a normal tweet when it has been edited as a reply but it
+	does not include a mention to the cited user.
+	(twittering-edit-post-status): confirm that the edited message
+	should be sent as a normal tweet when it has been edited as a
+	reply but it does not include a mention to the cited user.
+
+	* twittering-mode.el: Support a new format specifier "%u" for
+	`twittering-retweet-format'. It is replaced with the URL of the
+	cited tweet.
+	(twittering-retweet-format): update the docstring.
+	(twittering-get-status-url-from-alist): new function.
+	(twittering-organic-retweet): support a new format specifier
+	"%u".
+
+2012-02-12  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Accept a symbol as FUNC of a composite
+	timeline spec ":exclude-if/FUNC/SPEC".
+	(twittering-extract-timeline-spec): accept a symbol as FUNC of
+	a composite timeline spec ":exclude-if/FUNC/SPEC".
+	* test/test-twittering-mode.el: Add a test of an exclude-if
+	timeline spec with a symbol as FUNC.
+
+	* twittering-mode.el: Give the help overlay a priority specified
+	by `twittering-help-overlay-priority'.
+	(twittering-help-overlay-priority): new variable.
+	(twittering-edit-setup-help): give the overlay a priority
+	specified by `twittering-help-overlay-priority'.
+
 2012-02-11  Tadashi MATSUO  <tad@mymail.twin.jp>
 
 	* twittering-mode.el: Use an after-string property instead of

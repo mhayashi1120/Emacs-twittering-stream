@@ -328,7 +328,9 @@ latest one, and the last is the oldest one.")
 
 (defvar twittering-new-tweets-rendered-hook nil
   "*Hook run when new tweets are rendered.
-Hooks can refer to the timeline spec and timeline spec string as
+When the registered functions are called, the current buffer is the buffer
+that the new tweets are just rendered on.
+The functions can refer to the timeline spec and timeline spec string as
 `twittering-rendered-new-tweets-spec' and
 `twittering-rendered-new-tweets-spec-string', repectively.
 Hooks can also use the local variable `twittering-rendered-new-tweets' as a
@@ -405,10 +407,11 @@ Note that this skeleton is performed before the edit skeleton specified by
 `twittering-edit-skeleton' is performed.
 
 Replacement table:
- %s - screen_name
- %t - text
- %% - %
-")
+ %s - The screen-name of the cited tweet.
+ %t - The text of the cited tweet.
+ %u - The URL of the cited tweet.
+ %# - The ID of the cited tweet.
+ %% - % itself.")
 
 (defvar twittering-fill-column nil
   "*The fill-column used for \"%FILL{...}\" in `twittering-status-format'.
@@ -3673,7 +3676,7 @@ Before calling this, you have to configure `twittering-bitly-login' and
 ;;; QUERY_STRING ::= any string, where "/" is escaped by a backslash.
 ;;;
 ;;; EXCLUDE-IF ::= ":exclude-if/" FUNC "/" SPEC
-;;; FUNC ::= LAMBDA EXPRESSION
+;;; FUNC ::= LAMBDA EXPRESSION | SYMBOL
 ;;;
 ;;; MERGE ::= "(" MERGED_SPECS ")"
 ;;; MERGED_SPECS ::= SPEC | SPEC "+" MERGED_SPECS
@@ -3821,11 +3824,14 @@ Return cons of the spec and the rest string."
 		nil))))
        ((string= type "exclude-if")
 	(let ((result-pair
-	       (when (string-match "^:exclude-if/" str)
+	       (cond
+		((string-match "^:exclude-if/\\([^(/]+\\)/" str)
+		 `(,(intern (match-string 1 str)) . ,(match-end 1)))
+		((string-match "^:exclude-if/" str)
 		 (condition-case err
 		     (read-from-string str (match-end 0))
 		   (error
-		    nil)))))
+		    nil))))))
 	  (if result-pair
 	      (let ((func (car result-pair))
 		    (pos (cdr result-pair)))
@@ -4101,10 +4107,7 @@ referring the former ID."
     (cond
      ((null spec)
       nil)
-     ((eq type 'exclude-if)
-      (let ((base-spec (car (twittering-get-base-timeline-specs spec))))
-	(elt (gethash base-spec twittering-timeline-data-table) 1)))
-     ((eq 'merge (car spec))
+     ((memq type '(exclude-if merge))
       ;; Use the first non-nil table instead of merging the all tables
       ;; because it may take a long time to merge them.
       (car
@@ -4112,7 +4115,7 @@ referring the former ID."
 	nil
 	(mapcar (lambda (base-spec)
 		  (elt (gethash base-spec twittering-timeline-data-table) 1))
-		(twittering-get-base-timeline-specs spec)))))
+		(twittering-get-primary-base-timeline-specs spec)))))
      (t
       (elt (gethash spec twittering-timeline-data-table) 1)))))
 
@@ -4318,11 +4321,6 @@ Statuses are stored in ascending-order with respect to their IDs."
 			 (twittering-status-id< id2 id1))))))
 	  (puthash spec `(,id-table ,referring-id-table ,new-timeline-data)
 		   twittering-timeline-data-table))
-	(when (twittering-jojo-mode-p spec)
-	  (mapc (lambda (status)
-		  (twittering-update-jojo (cdr (assq 'user-screen-name status))
-					  (cdr (assq 'text status))))
-		new-statuses))
 	(let ((twittering-new-tweets-spec spec)
 	      (twittering-new-tweets-statuses new-statuses)
 	      (twittering-new-tweets-count (length new-statuses)))
@@ -4353,6 +4351,17 @@ Statuses are stored in ascending-order with respect to their IDs."
 (defun twittering-get-status-url (username &optional id)
   "Generate a URL of a user or a specific status."
   (let ((func
+	 (cdr (assq
+	       'status-url
+	       (assq twittering-service-method
+		     twittering-service-method-table)))))
+    (funcall func username id)))
+
+(defun twittering-get-status-url-from-alist (status)
+  "Generate a URL of a tweet specified by an alist STATUS."
+  (let ((username (cdr (assq 'user-screen-name status)))
+	(id (cdr (assq 'id status)))
+	(func
 	 (cdr (assq
 	       'status-url
 	       (assq twittering-service-method
@@ -8374,6 +8383,8 @@ been initialized yet."
 	  (boundp 'twittering-sign-string-function))
       (message "Warning: `twittering-sign-simple-string' and `twittering-sign-string-function' are obsolete. Use the new feature `twittering-edit-skeleton'.")
       ))
+    (add-hook 'twittering-new-tweets-rendered-hook
+	      'twittering-jojo-mode-hook-function)
     (run-hooks 'twittering-mode-init-hook)
     (setq twittering-initialized t)))
 
@@ -8496,9 +8507,8 @@ function PRED returns non-nil. PRED is invoked with three arguments
 TWEET-TYPE, IN-REPLY-TO-ID and CURRENT-SPEC.
 TWEET-TYPE is a symbol, which is one of 'direct-message, 'normal,
 'organic-retweet and 'reply, specifying which type of tweet will be edited.
-If the tweet will not be edited as a reply, IN-REPLY-TO-ID is nil.
-If the tweet will be edited as a reply, IN-REPLY-TO-ID is a string specifying
-the replied tweet.
+If the tweet will be edited as a reply or an organic retweet, IN-REPLY-TO-ID
+is a string specifying the replied tweet. Otherwise, IN-REPLY-TO-ID is nil.
 CURRENT-SPEC specifies where the action of posting a tweet is performed.
 If the action is performed on a twittering-mode buffer, CURRENT-SPEC is
 a timeline spec string of the buffer.
@@ -8647,14 +8657,16 @@ entry in `twittering-edit-skeleton-alist' are performed.")
 (defvar twittering-edit-history nil)
 (defvar twittering-edit-local-history nil)
 (defvar twittering-edit-local-history-idx nil)
-(defvar twittering-help-overlay nil)
 (defvar twittering-warning-overlay nil)
 
-(define-derived-mode twittering-edit-mode text-mode "twmode-status-edit"
+(define-derived-mode twittering-edit-mode nil "twmode-status-edit"
   (use-local-map twittering-edit-mode-map)
 
-  (make-local-variable 'twittering-help-overlay)
-  (setq twittering-help-overlay nil)
+  ;; Prevent `global-font-lock-mode' enabling `font-lock-mode'.
+  ;; This technique is derived from `lisp/bs.el' distributed with Emacs 22.2.
+  (make-local-variable 'font-lock-global-modes)
+  (setq font-lock-global-modes '(not twittering-edit-mode))
+
   (make-local-variable 'twittering-warning-overlay)
   (setq twittering-warning-overlay (make-overlay 1 1 nil nil nil))
   (overlay-put twittering-warning-overlay 'face 'font-lock-warning-face)
@@ -8673,6 +8685,7 @@ entry in `twittering-edit-skeleton-alist' are performed.")
   (let ((km twittering-edit-mode-map))
     (define-key km (kbd "C-c C-c") 'twittering-edit-post-status)
     (define-key km (kbd "C-c C-k") 'twittering-edit-cancel-status)
+    (define-key km (kbd "C-c C-r") 'twittering-edit-toggle-reply)
     (define-key km (kbd "M-n") 'twittering-edit-next-history)
     (define-key km (kbd "M-p") 'twittering-edit-previous-history)
     (define-key km (kbd "<f4>") 'twittering-edit-replace-at-point)))
@@ -8732,32 +8745,89 @@ instead."
 			(- (point-max) (- length maxlen)) (point-max))
 	(move-overlay twittering-warning-overlay 1 1)))))
 
+(defun twittering-edit-get-help-end ()
+  "Return the end position of the help on `twittering-edit-mode'."
+  (when (eq major-mode 'twittering-edit-mode)
+    (next-single-property-change (point-min) 'read-only nil (point-max))))
+
 (defun twittering-edit-extract-status ()
+  "Return the text of the status being edited on `twittering-edit-mode'."
   (if (eq major-mode 'twittering-edit-mode)
-      (buffer-substring-no-properties (point-min) (point-max))
+      (buffer-substring-no-properties (twittering-edit-get-help-end)
+				      (point-max))
     ""))
 
-(defun twittering-edit-setup-help (&optional username tweet-type)
-  (let* ((item (if (eq tweet-type 'direct-message)
-		   (format "a direct message to %s" username)
-		 "a tweet"))
-	 (help-str (format (substitute-command-keys "Keymap:
+(defun twittering-edit-reset-status (str)
+  "Reset the contents of the current `twittering-edit-mode' buffer with STR."
+  (when (eq major-mode 'twittering-edit-mode)
+    (let ((help-end (twittering-edit-get-help-end)))
+      (delete-region help-end (point-max))
+      (goto-char help-end)
+      (insert str)
+      (goto-char help-end))))
+
+(defun twittering-edit-set-help-string (str)
+  "Render STR as a help for `twittering-edit-mode' to the current buffer."
+  (let* ((help-str (propertize str 'read-only t))
+	 (len (length help-str)))
+    (add-text-properties 0 1 '(front-sticky (read-only)) help-str)
+    (add-text-properties (1- len) len '(rear-nonsticky t) help-str)
+    (save-excursion
+      (let ((inhibit-read-only t)
+	    (inhibit-modification-hooks t)
+	    (help-end (twittering-edit-get-help-end)))
+	(goto-char help-end)
+	(if (= (point-min) help-end)
+	    ;; When no helps are rendered, the all markers should be
+	    ;; placed after the new help.
+	    (insert help-str)
+	  ;; Use `insert-before-markers' because the marker of the current
+	  ;; position should follow the new help.
+	  ;; Delete the old help after inserting the new help to make
+	  ;; the new help visible if possible.
+	  (insert-before-markers help-str)
+	  (delete-region (point-min) help-end))))))
+
+(defun twittering-edit-setup-help ()
+  (let* ((direct-message-recipient
+	  (cdr (assq 'direct-message-recipient twittering-edit-mode-info)))
+	 (tweet-type (cdr (assq 'tweet-type twittering-edit-mode-info)))
+	 (cited-id (cdr (assq 'cited-id twittering-edit-mode-info)))
+	 (item (cond
+		((eq tweet-type 'direct-message)
+		 (format "a direct message to %s" direct-message-recipient))
+		((eq tweet-type 'reply)
+		 "a reply")
+		(t
+		 "a tweet")))
+	 (status-format
+	  (cond
+	   ((eq tweet-type 'direct-message)
+	    (format "%%FILL{DIRECT MESSAGE to %s}\n" direct-message-recipient))
+	   ((eq tweet-type 'reply)
+	    "%FILL{REPLY to the tweet by %s at %C{%y/%m/%d %H:%M:%S};}\n%FILL{%FACE[font-lock-doc-face]{\"%T\"}}\n")
+	   (t
+	    nil)))
+	 (func (when status-format
+		 (twittering-generate-format-status-function status-format)))
+	 (help-str
+	  (apply 'concat
+		 `(,@(when func
+		       `(,(funcall func
+				   (twittering-find-status cited-id)
+				   nil)))
+		   ,(propertize (format (substitute-command-keys "Keymap:
   \\[twittering-edit-post-status]: send %s
   \\[twittering-edit-cancel-status]: cancel %s
+  \\[twittering-edit-toggle-reply]: toggle a normal tweet and a reply.
   \\[twittering-edit-next-history]: next history element
   \\[twittering-edit-previous-history]: previous history element
   \\[twittering-edit-replace-at-point]: shorten URL at point
 
 ---- text above this line is ignored ----
-") item item))
-	 (help-overlay
-	  (or twittering-help-overlay
-	      (make-overlay 1 1 nil nil nil))))
-    (add-text-properties 0 (length help-str) '(face font-lock-comment-face)
-			 help-str)
-    (overlay-put help-overlay 'after-string help-str)
-    (overlay-put help-overlay 'priority 1000)
-    (setq twittering-help-overlay help-overlay)))
+") item item)
+				'face 'font-lock-comment-face)))))
+    (twittering-edit-set-help-string help-str)))
 
 (defun twittering-edit-close ()
   (kill-buffer (current-buffer))
@@ -8765,7 +8835,14 @@ instead."
     (set-window-configuration twittering-pre-edit-window-configuration)
     (setq twittering-pre-edit-window-configuration nil)))
 
-(defvar twittering-reply-recipient nil)
+(defvar twittering-edit-mode-info nil
+  "Alist of a tweet being edited.
+Pairs of a key symbol and an associated value are following:
+  direct-message-recipient -- the recipient when the edited message is
+    sent as a direct message.
+  cited-id -- the id of the tweet that the edited message refers to.
+  tweet-type -- the type of the edited message, which is one of the
+    following symbol; normal, reply or direct-message.")
 
 (defun twittering-ensure-whole-of-status-is-visible (&optional window)
   "Ensure that the whole of the tweet on the current point is visible."
@@ -8791,7 +8868,17 @@ instead."
       (pop-to-buffer buf nil t)
       (twittering-ensure-whole-of-status-is-visible win))
     (twittering-edit-mode)
-    (twittering-edit-setup-help username tweet-type)
+    (make-local-variable 'twittering-edit-mode-info)
+    (setq twittering-edit-mode-info
+	  `((cited-id . ,reply-to-id)
+	    (tweet-type . ,(cdr (assq tweet-type
+				      '((direct-message . direct-message)
+					(normal . normal)
+					(organic-retweet . normal)
+					(reply . reply)))))
+	    (direct-message-recipient . ,username)))
+    (twittering-edit-setup-help)
+    (goto-char (twittering-edit-get-help-end))
     (if (eq tweet-type 'direct-message)
 	(message "C-c C-c to send, C-c C-k to cancel")
       (and (null init-string-or-skeleton)
@@ -8807,48 +8894,46 @@ instead."
        ((listp init-string-or-skeleton)
 	(skeleton-insert init-string-or-skeleton)))
       (set-buffer-modified-p nil))
-    (make-local-variable 'twittering-reply-recipient)
-    (setq twittering-reply-recipient
-	  `(,reply-to-id ,username ,(when (eq tweet-type 'direct-message)
-				      '(direct_messages))))
     (twittering-edit-skeleton-insert tweet-type reply-to-id
 				     current-spec)))
 
 (defun twittering-edit-post-status ()
   (interactive)
-  (let ((status (twittering-edit-extract-status))
-	(reply-to-id (nth 0 twittering-reply-recipient))
-	(username (nth 1 twittering-reply-recipient))
-	(spec (nth 2 twittering-reply-recipient)))
+  (let* ((status (twittering-edit-extract-status))
+	 (cited-id (cdr (assq 'cited-id twittering-edit-mode-info)))
+	 (cited-tweet (twittering-find-status cited-id))
+	 (cited-username (cdr (assq 'user-screen-name cited-tweet)))
+	 (direct-message-recipient
+	  (cdr (assq 'direct-message-recipient twittering-edit-mode-info)))
+	 (tweet-type (cdr (assq 'tweet-type twittering-edit-mode-info))))
     (cond
      ((string-match "\\` *\\'" status)
       (message "Empty tweet!"))
      ((< 140 (twittering-effective-length status))
       (message "Tweet is too long!"))
-     ((or (not twittering-request-confirmation-on-posting)
+     ((or (and (eq tweet-type 'reply)
+	       (or (string-match (concat "@" cited-username
+					 "\\(?:[\n\r \t]+\\)*")
+				 status)
+		   (y-or-n-p
+		    "Send this tweet without mentions as a normal tweet (not a reply)? ")))
+	  (not twittering-request-confirmation-on-posting)
 	  (y-or-n-p "Send this tweet? "))
       (setq twittering-edit-history
 	    (cons status twittering-edit-history))
       (cond
-       ((twittering-timeline-spec-is-direct-messages-p spec)
-	(if username
+       ((eq tweet-type 'direct-message)
+	(if direct-message-recipient
 	    (twittering-call-api 'send-direct-message
-				 `((username . ,username)
+				 `((username . ,direct-message-recipient)
 				   (status . ,status)))
 	  (message "No username specified")))
+       ((eq tweet-type 'reply)
+	(twittering-call-api 'update-status
+			     `((status . ,status)
+			       (in-reply-to-status-id . ,cited-id))))
        (t
-	(let ((as-reply
-	       (and reply-to-id
-		    (string-match
-		     (concat "\\`@" username "\\(?:[\n\r \t]+\\)*")
-		     status))))
-	  ;; Add in_reply_to_status_id only when a posting status
-	  ;; begins with @username.
-	  (twittering-call-api
-	   'update-status
-	   `((status . ,status)
-	     ,@(when as-reply
-		 `((in-reply-to-status-id . ,(format "%s" reply-to-id)))))))))
+	(twittering-call-api 'update-status `((status . ,status)))))
       (twittering-edit-close))
      (t
       nil))))
@@ -8867,13 +8952,10 @@ instead."
       (message "End of history.")
     (let ((current-history (nthcdr twittering-edit-local-history-idx
 				   twittering-edit-local-history)))
-      (setcar current-history (buffer-string))
+      (setcar current-history (twittering-edit-extract-status))
       (decf twittering-edit-local-history-idx)
-      (erase-buffer)
-      (insert (nth twittering-edit-local-history-idx
-		   twittering-edit-local-history))
-      (twittering-edit-setup-help)
-      (goto-char (point-min)))))
+      (twittering-edit-reset-status (nth twittering-edit-local-history-idx
+					 twittering-edit-local-history)))))
 
 (defun twittering-edit-previous-history ()
   (interactive)
@@ -8882,20 +8964,38 @@ instead."
       (message "Beginning of history.")
     (let ((current-history (nthcdr twittering-edit-local-history-idx
 				   twittering-edit-local-history)))
-      (setcar current-history (buffer-string))
+      (setcar current-history (twittering-edit-extract-status))
       (incf twittering-edit-local-history-idx)
-      (erase-buffer)
-      (insert (nth twittering-edit-local-history-idx
-		   twittering-edit-local-history))
-      (twittering-edit-setup-help)
-      (goto-char (point-min))))
-  )
+      (twittering-edit-reset-status (nth twittering-edit-local-history-idx
+					 twittering-edit-local-history)))))
 
 (defun twittering-edit-replace-at-point ()
   (interactive)
   (when (eq major-mode 'twittering-edit-mode)
     (twittering-tinyurl-replace-at-point)
     (twittering-edit-length-check)))
+
+(defun twittering-edit-toggle-reply ()
+  "Toggle whether the tweet being edited will be sent as a reply or not."
+  (interactive)
+  (let ((tweet-type (cdr (assq 'tweet-type twittering-edit-mode-info)))
+	(cited-id (cdr (assq 'cited-id twittering-edit-mode-info))))
+    (cond
+     ((eq tweet-type 'direct-message)
+      (message "The current message is a direct message."))
+     ((null cited-id)
+      (message "The current message does not have a reply target."))
+     (t
+      (setq twittering-edit-mode-info
+	    (mapcar (lambda (entry)
+		      (if (eq (car entry) 'tweet-type)
+			  `(tweet-type
+			    . ,(cdr (assq (cdr entry)
+					  '((normal . reply)
+					    (reply . normal)))))
+			entry))
+		    twittering-edit-mode-info))
+      (twittering-edit-setup-help)))))
 
 ;;;;
 ;;;; Edit a status on minibuffer
@@ -8977,8 +9077,9 @@ instead."
 			(as-reply
 			 (and reply-to-id
 			      username
+			      (eq tweet-type 'reply)
 			      (string-match
-			       (concat "\\`@" username "\\(?:[\n\r \t]+\\)*")
+			       (concat "@" username "\\(?:[\n\r \t]+\\)*")
 			       status))))
 		    ;; Add in_reply_to_status_id only when a posting
 		    ;; status begins with @username.
@@ -9134,12 +9235,6 @@ instead."
 	    (< 0 (prefix-numeric-value arg))))
     (unless (eq prev-mode twittering-jojo-mode)
       (twittering-update-mode-line))))
-
-(defun twittering-jojo-mode-p (spec)
-  (let ((buffer (twittering-get-buffer-from-spec spec)))
-    (when (buffer-live-p buffer)
-      (with-current-buffer buffer
-	twittering-jojo-mode))))
 
 (defun twittering-toggle-reverse-mode (&optional arg)
   (interactive "P")
@@ -9317,8 +9412,8 @@ instead."
   "Post a tweet.
 The first argument INIT-STRING-OR-SKELETON is nil, an initial text or a
 skeleton to be inserted with `skeleton-insert'.
-REPLY-TO-ID and USERNAME are an ID and a user-screen-name of a tweet to
-which you are going to reply. If the tweet is not a reply, they are nil.
+REPLY-TO-ID is an ID of a tweet which you are going to cite or reply to.
+USERNAME is a recipient of a direct message.
 TWEET-TYPE is a symbol meaning the type of the tweet being edited. It must
 be one of 'direct-message, 'normal, 'organic-retweet and 'reply.
 If TWEET-TYPE is nil, it is equivalent to 'normal, which means that a tweet
@@ -9367,26 +9462,37 @@ How to edit a tweet is determined by `twittering-update-status-funcion'."
      (t
       (message "Request canceled")))))
 
-(defun twittering-update-jojo (usr msg)
-  (when (and (not (string= usr (twittering-get-username)))
+(defun twittering-post-predicted-message-like-jojo (status)
+  (let ((screen-name (cdr (assq 'user-screen-name status)))
+	(text (cdr (assq 'text status))))
+    (when (and (not (string= screen-name (twittering-get-username)))
+	       (string-match
+		(mapconcat 'char-to-string
+			   (mapcar
+			    'twittering-ucs-to-char
+			    '(#x6b21 #x306b #x005c #x0028 #x304a #x524d
+				     #x005c #x007c #x8cb4 #x69d8 #x005c #x0029
+				     #x306f #x300c #x005c #x0028 #x005b #x005e
+				     #x300d #x005d #x002b #x005c #x0029 #x300d
+				     #x3068 #x8a00 #x3046))
+			   "")
+		text))
+      (let ((text
+	     (concat "@" screen-name " "
+		     (match-string-no-properties 2 msg)
+		     (mapconcat 'char-to-string
+				(mapcar 'twittering-ucs-to-char
+					'(#x3000 #x306f #x3063 #x0021 #x003f))
+				""))))
+	(twittering-call-api 'update-status `((status . ,text)))))))
+
+(defun twittering-jojo-mode-hook-function ()
+  (when (and twittering-jojo-mode
 	     (string= "Japanese" current-language-environment)
 	     (or (< 21 emacs-major-version)
 		 (eq 'utf-8 (terminal-coding-system))))
-    (if (string-match
-	 (mapconcat
-	  'char-to-string
-	  (mapcar 'twittering-ucs-to-char
-		  '(27425 12395 92 40 12362 21069 92 124 36020 27096
-			  92 41 12399 12300 92 40 91 94 12301 93 43 92
-			  41 12301 12392 35328 12358)) "")
-	 msg)
-	(let ((text (concat "@" usr " "
-			    (match-string-no-properties 2 msg)
-			    (mapconcat
-			     'char-to-string
-			     (mapcar 'twittering-ucs-to-char
-				     '(12288 12399 12387 33 63)) ""))))
-	  (twittering-call-api 'update-status `((status . ,text)))))))
+    (mapcar 'twittering-post-predicted-message-like-jojo
+	    twittering-rendered-new-tweets)))
 
 (defun twittering-direct-message ()
   (interactive)
@@ -9454,30 +9560,31 @@ How to edit a tweet is determined by `twittering-update-status-funcion'."
 (defun twittering-organic-retweet ()
   (interactive)
   (let* ((id (twittering-get-id-at))
-	 (status (twittering-find-status (twittering-get-id-at))))
-    (when (cdr (assq 'user-protected status))
-      (error "Cannot retweet protected tweets.")))
-  (let ((username (get-text-property (point) 'username))
-	(text (get-text-property (point) 'text))
-	(id (get-text-property (point) 'id))
-	(retweet-time (current-time))
-	(skeleton-with-format-string
-	 (cond
-	  ((null twittering-retweet-format)
-	   '(nil _ " RT: %t (via @%s)"))
-	  ((stringp twittering-retweet-format)
-	   `(nil ,twittering-retweet-format _))
-	  ((listp twittering-retweet-format)
-	   twittering-retweet-format)
-	  (t
-	   nil))))
-    (when username
+	 (status (twittering-find-status id))
+	 (username (cdr (assq 'user-screen-name status)))
+	 (text (cdr (assq 'text status)))
+	 (retweet-time (current-time))
+	 (skeleton-with-format-string
+	  (cond
+	   ((null twittering-retweet-format)
+	    '(nil _ " RT: %t (via @%s)"))
+	   ((stringp twittering-retweet-format)
+	    `(nil ,twittering-retweet-format _))
+	   ((listp twittering-retweet-format)
+	    twittering-retweet-format)
+	   (t
+	    nil))))
+    (cond
+     ((cdr (assq 'user-protected status))
+      (error "Cannot retweet protected tweets."))
+     (username
       (let ((prefix "%")
 	    (replace-table
 	     `(("%" . "%")
 	       ("s" . ,username)
 	       ("t" . ,text)
 	       ("#" . ,id)
+	       ("u" . ,(twittering-get-status-url-from-alist status))
 	       ("C{\\([^}]*\\)}" .
 		(lambda (context)
 		  (let ((str (cdr (assq 'following-string context)))
@@ -9492,8 +9599,8 @@ How to edit a tweet is determined by `twittering-update-status-funcion'."
 		       (twittering-format-string element prefix replace-table)
 		     element))
 		 skeleton-with-format-string)
-	 nil nil 'organic-retweet)
-	))))
+	 id nil 'organic-retweet)
+	)))))
 
 (defun twittering-native-retweet ()
   (interactive)

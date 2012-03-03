@@ -102,6 +102,10 @@
   Since the Emacs LISP program `windows.el' written by HIROSE Yuuji
   implicitly loads `revive.el' if possible, you should also take care
   of the order of loading `windows.el' and the configuration.
+* New format specifier "%u" for `twittering-retweet-format'.
+  "%u" is added as a new format specifier for
+  `twittering-retweet-format'. It is replaced with the URL of the
+  cited tweet.
 * Skeleton for initializing an organic retweet.
   You can use a skeleton as the variable `twittering-retweet-format'
   for initializing an organic retweet. This means that you can also
@@ -109,11 +113,13 @@
   skeleton are converted with the below replacement table and then the
   skeleton is inserted with `skeleton-insert'.
   The replacement table is as follows.
-    %s: screen_name
-    %t: text
-    %%: %
-  This is equivalent to the previous rule applied for
-  `twittering-retweet-format'.
+    %s - The screen-name of the cited tweet.
+    %t - The text of the cited tweet.
+    %u - The URL of the cited tweet.
+    %# - The ID of the cited tweet.
+    %% - % itself.
+  This is equivalent to the rule applied for
+  `twittering-retweet-format' as a string.
   Note that it is inserted before the edit skeleton specified by
   `twittering-edit-skeleton' is performed.
 * Tweet type of edit skeleton for an organic retweet.
@@ -145,8 +151,10 @@
 * Support for exclude-if timelines.
   ":exclude-if/FUNC/SPEC" is added as a new timeline spec. The
   timeline equals SPEC, except that it does not include tweets that
-  the function FUNC returns non-nil for. FUNC is a lambda expression
-  that receives an alist corresponding to a tweet as an argument. You
+  the function FUNC returns non-nil for. FUNC must be a function that
+  receives an alist corresponding to a tweet as an argument. A lambda
+  expression and a symbol bound to a function are valid as FUNC. But a
+  symbol name must not include two special characters, "(" or "/". You
   can specify any timeline spec for SPEC. For example, you can ignore
   tweets including "WORD" from the home  timeline by the following
   timeline spec; ":exclude-if/(lambda (tweet) (string-match \"WORD\"
@@ -177,6 +185,15 @@
   is invoked after initializing global variables. Unlike
   `twittering-mode-hook', which is invoked every time a buffer is
   generated for twittering-mode, the new hook invoked only once.
+* Description on a pop-up edit buffer.
+  The description is rendered on the top of the pop-up edit
+  buffer. Which the tweet is a reply, a direct message or an
+  independent ordinary tweet is explicitly displayed. You can also
+  copy the tweet being replied.
+* Switch of a reply and a normal tweet on a pop-up edit buffer.
+  You can toggle whether the tweet being edited will be sent as a
+  reply or a normal tweet by invoking `twittering-edit-toggle-reply'
+  bound to "C-c C-r" in default.
 
 ### Bug fixes
 * Fix of displaying a message of authorization.
