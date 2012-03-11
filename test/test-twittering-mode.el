@@ -223,6 +223,19 @@
 
   (test-assert-equal
    (test-restore-timeline-spec
+    ":search/ABC/"
+    '(search "ABC")
+    '(search "ABC"))
+   '(t t))
+  (test-assert-equal
+   (test-restore-timeline-spec
+    ":search/AB\\\\C\\/aaa\\\\/"
+    '(search "AB\\C/aaa\\")
+    '(search "AB\\C/aaa\\"))
+   '(t t))
+
+  (test-assert-equal
+   (test-restore-timeline-spec
     ":filter/ABC/user/mylist"
     '(filter "ABC" (list "user" "mylist"))
     '(filter "ABC" (list "user" "mylist")))
@@ -284,6 +297,31 @@
 		   (string-match "\\\\" (cdr (assq 'text tweet))))
 		 (exclude-if (lambda (tw) (assq 'retweeting-id tw))
 			     (list "user" "mylist"))))
+   '(t t))
+
+  (test-assert-equal
+   (test-restore-timeline-spec
+    ":exclude-re/ABC/user"
+    '(exclude-re "ABC" (user "user"))
+    '(exclude-re "ABC" (user "user")))
+   '(t t))
+  (test-assert-equal
+   (test-restore-timeline-spec
+    ":exclude-re/ABC/user/mylist"
+    '(exclude-re "ABC" (list "user" "mylist"))
+    '(exclude-re "ABC" (list "user" "mylist")))
+   '(t t))
+  (test-assert-equal
+   (test-restore-timeline-spec
+    ":exclude-re/ABC\\\\/user/mylist"
+    '(exclude-re "ABC\\\\" (list "user" "mylist"))
+    '(exclude-re "ABC\\\\" (list "user" "mylist")))
+   '(t t))
+  (test-assert-equal
+   (test-restore-timeline-spec
+    ":exclude-re/ABC\\/\\(word\\|123\\)/user"
+    '(exclude-re "ABC/\\(word\\|123\\)" (user "user"))
+    '(exclude-re "ABC/\\(word\\|123\\)" (user "user")))
    '(t t))
 
   (test-assert-equal

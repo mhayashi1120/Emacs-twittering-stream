@@ -194,6 +194,13 @@
   You can toggle whether the tweet being edited will be sent as a
   reply or a normal tweet by invoking `twittering-edit-toggle-reply'
   bound to "C-c C-r" in default.
+* Support for exclude-re timelines.
+  ":exclude-re/REGEXP/SPEC" is added as a new timeline spec. The
+  timeline equals SPEC, except that it does not include tweets that
+  matches the regular expression REGEXP. In REGEXP, a slash must be
+  escaped with a backslash. For example, tweets including a slash are
+  excluded from the timeline corresponding to the Emacs string literal
+  ":exclude-re/\\//:home".
 
 ### Bug fixes
 * Fix of displaying a message of authorization.
@@ -240,6 +247,7 @@
   response of the `destroy-status' API. If the API ends in failure,
   you can try to delete the status again because the status remains on
   the buffer.
+* Fix of the escape of a query string in a search timeline spec.
 
  2.0.0: 2011-04-22
 ------------------

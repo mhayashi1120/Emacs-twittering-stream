@@ -3641,6 +3641,9 @@ Before calling this, you have to configure `twittering-bitly-login' and
 ;;; - (exclude-if FUNC SPEC):
 ;;;     the same timeline as SPEC, except that it does not include tweets
 ;;;     that FUNC returns non-nil for.
+;;; - (exclude-re REGEXP-STRING SPEC):
+;;;     the same timeline as SPEC, except that it does not include tweets
+;;;     that matches the regular expression specified by REGEXP-STRING.
 ;;;
 ;;; - (merge SPEC1 SPEC2 ...): result of merging timelines SPEC1 SPEC2 ...
 ;;; - (filter REGEXP SPEC): timeline filtered with REGEXP.
@@ -3677,6 +3680,7 @@ Before calling this, you have to configure `twittering-bitly-login' and
 ;;;
 ;;; EXCLUDE-IF ::= ":exclude-if/" FUNC "/" SPEC
 ;;; FUNC ::= LAMBDA EXPRESSION | SYMBOL
+;;; EXCLUDE-RE ::= ":exclude-re/" REGEXP "/" SPEC
 ;;;
 ;;; MERGE ::= "(" MERGED_SPECS ")"
 ;;; MERGED_SPECS ::= SPEC | SPEC "+" MERGED_SPECS
@@ -3723,7 +3727,7 @@ If SHORTEN is non-nil, the abbreviated expression will be used."
      ((eq type 'search)
       (let ((query (car value)))
 	(concat ":search/"
-		(replace-regexp-in-string "/" "\\/" query nil t)
+		(replace-regexp-in-string "\\(\\\\\\|/\\)" "\\\\\\1" query)
 		"/")))
      ;; composite
      ((eq type 'exclude-if)
@@ -3731,6 +3735,14 @@ If SHORTEN is non-nil, the abbreviated expression will be used."
 	    (spec (cadr value))
 	    (print-level nil))
 	(concat ":exclude-if/" (prin1-to-string func) "/"
+		(twittering-timeline-spec-to-string spec))))
+     ((eq type 'exclude-re)
+      (let ((regexp-str (car value))
+	    (spec (cadr value))
+	    (print-level nil))
+	(concat ":exclude-re/"
+		(replace-regexp-in-string "/" "\\\\\/" regexp-str)
+		"/"
 		(twittering-timeline-spec-to-string spec))))
      ((eq type 'filter)
       (let ((regexp (car value))
@@ -3815,8 +3827,8 @@ Return cons of the spec and the rest string."
 	(if (string-match "^:search/\\(\\(.*?[^\\]\\)??\\(\\\\\\\\\\)*\\)??/"
 			  str)
 	    (let* ((escaped-query (or (match-string 1 str) ""))
-		   (query (replace-regexp-in-string "\\\\/" "/"
-						    escaped-query nil t))
+		   (query (replace-regexp-in-string "\\\\\\(\\\\\\|/\\)" "\\1"
+						    escaped-query))
 		   (rest (substring str (match-end 0))))
 	      (if (not (string= "" escaped-query))
 		  `((search ,query) . ,rest)
@@ -3853,6 +3865,27 @@ Return cons of the spec and the rest string."
 		    `((exclude-if ,func ,spec) . ,rest)))))
 	    (error "\"%s\" has an invalid function" str)
 	    nil)))
+       ((string= type "exclude-re")
+	(cond
+	 ((string-match "^:exclude-re/\\(\\(.*?[^\\]\\)??\\(\\\\\\\\\\)*\\)??/"
+			str)
+	  (let* ((escaped-regexp (or (match-string 1 str) ""))
+		 (regexp
+		  (replace-regexp-in-string "\\\\/" "/" escaped-regexp nil t))
+		 (following (substring str (match-end 0))))
+	    (cond
+	     ((string= "" escaped-regexp)
+	      (error "\"%s\" has no valid regexp" str)
+	      nil)
+	     (t
+	      (let* ((pair (twittering-extract-timeline-spec
+			    following unresolved-aliases))
+		     (spec (car pair))
+		     (rest (cdr pair)))
+		`((exclude-re ,regexp ,spec) . ,rest))))))
+	 (t
+	  (error "\"%s\" has no valid regexp" str)
+	  nil)))
        ((string= type "filter")
 	(if (string-match "^:filter/\\(\\(.*?[^\\]\\)??\\(\\\\\\\\\\)*\\)??/"
 			  str)
@@ -3951,7 +3984,7 @@ Return nil if SPEC-STR is invalid as a timeline spec."
   "Return non-nil if SPEC is a composite timeline spec.
 `composite' means that the spec depends on other timelines."
   (let ((composite-spec-types
-	 '(exclude-if merge))
+	 '(exclude-if exclude-re merge))
 	(type (car spec)))
     (memq type composite-spec-types)))
 
@@ -4007,7 +4040,7 @@ The result timelines may be a composite timeline."
     (cond
      ((twittering-timeline-spec-primary-p spec)
       `(,spec))
-     ((eq type 'exclude-if)
+     ((memq type '(exclude-if exclude-re))
       `(,(elt spec 2)))
      ((eq type 'merge)
       (cdr spec))
@@ -4068,6 +4101,18 @@ If SPEC is a primary timeline and does not equal BASE-SPEC, return nil."
 			  (unless (funcall func status)
 			    status))
 			direct-base-statuses))))
+     ((eq type 'exclude-re)
+      (let* ((direct-base (car (twittering-get-base-timeline-specs spec)))
+	     (direct-base-statuses
+	      (twittering-generate-composite-timeline direct-base
+						      base-spec base-statuses))
+	     (regexp (elt spec 1)))
+	(remove nil
+		(mapcar
+		 (lambda (status)
+		   (unless (string-match regexp (cdr (assq 'text status)))
+		     status))
+		 direct-base-statuses))))
      ((eq type 'merge)
       (sort
        (apply 'append
@@ -4107,7 +4152,7 @@ referring the former ID."
     (cond
      ((null spec)
       nil)
-     ((memq type '(exclude-if merge))
+     ((memq type '(exclude-if exclude-re merge))
       ;; Use the first non-nil table instead of merging the all tables
       ;; because it may take a long time to merge them.
       (car
@@ -4125,7 +4170,7 @@ referring the former ID."
     (cond
      ((null spec)
       nil)
-     ((memq type '(exclude-if merge))
+     ((memq type '(exclude-if exclude-re merge))
       (let ((primary-base-specs
 	     (twittering-get-primary-base-timeline-specs spec)))
 	(sort
