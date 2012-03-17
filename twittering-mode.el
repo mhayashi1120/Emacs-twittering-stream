@@ -433,9 +433,6 @@ This value will be used only when showing new tweets.
 
 See `twittering-show-replied-tweets' for more details.")
 
-(defvar twittering-default-retrieving-replied-tweets t
-  "*If non-nil, automatically retrieving replied statuses.")
-
 (defvar twittering-disable-overlay-on-too-long-string nil
   "*If non-nil, disable overlay on too long string on edit buffer.
 
@@ -1452,10 +1449,9 @@ BUFFER may be a buffer or the name of an existing buffer which contains the HTTP
 	  (prog1
 	      (buffer-substring (point-min) (match-end 0))
 	    (when twittering-debug-mode
-	      (debug-printf "connection-info=%s\n" connection-info)
-	      (debug-print "HTTP response header:\n--BEGIN\n")
-	      (debug-print (buffer-substring (point-min) (match-end 0)))
-	      (debug-print "--END\n")))
+	      (twittering-debug-print "HTTP response header:\n--BEGIN\n")
+	      (twittering-debug-print (buffer-substring (point-min) (match-end 0)))
+	      (twittering-debug-print "--END\n")))
 	nil))))
 
 (defun twittering-make-header-info-alist (header-str)
@@ -2312,35 +2308,6 @@ If BUFFER is nil, the current buffer is used instead."
     (twittering-case-string
      status-code
      (("200")
-      (twittering-debug-printf "connection-info=%s" connection-info)
-      ;; It may be necessary to decode the contents of the buffer by
-      ;; UTF-8 because `twittering-http-application-headers' specifies
-      ;; utf-8 as one of acceptable charset.
-      ;; For the present, only UTF-8 is taken into account.
-      (let* ((content-type
-	      ;; According to RFC2616, field name of a HTTP header is
-	      ;; case-insensitive.
-	      (car
-	       (remove
-		nil
-		(mapcar (lambda (entry)
-			  (when (and (stringp (car entry))
-				     (let ((case-fold-search t))
-				       (string-match "\\`content-type\\'"
-						     (car entry))))
-			    (cdr entry)))
-			header-info))))
-	     (parameters (when (stringp content-type)
-			   (cdr (split-string content-type ";"))))
-	     (regexp "^[[:space:]]*charset=utf-8[[:space:]]*$")
-	     (encoded-with-utf-8
-	      (let ((case-fold-search t))
-		(remove nil
-			(mapcar (lambda (entry)
-				  (string-match regexp entry))
-				parameters)))))
-	(when encoded-with-utf-8
-	  (decode-coding-region (point-min) (point-max) 'utf-8)))
       (let* ((spec (cdr (assq 'timeline-spec connection-info)))
 	     (spec-string (cdr (assq 'timeline-spec-string connection-info)))
 	     (format (cdr (assq 'format connection-info)))
@@ -2409,10 +2376,10 @@ If BUFFER is nil, the current buffer is used instead."
 (defun twittering-retrieve-single-tweet-sentinel (proc status connection-info header-info)
   (let ((status-line (cdr (assq 'status-line header-info)))
 	(status-code (cdr (assq 'status-code header-info))))
-    (case-string
+    (twittering-case-string
      status-code
      (("200" "403" "404")
-      (debug-printf "connection-info=%s" connection-info)
+      (twittering-debug-printf "connection-info=%s" connection-info)
       (let* ((id (cdr (assq 'id connection-info)))
 	     (format (cdr (assq 'format connection-info)))
 	     (user-screen-name (cdr (assq 'user-screen-name connection-info)))
@@ -4351,7 +4318,7 @@ referring the former ID."
 		  (twittering-get-dependent-timeline-specs spec)))
 	      modified-spec))))))
 
-(defun twittering-get-replied-statuses (buffer id &optional count)
+(defun twittering-get-replied-statuses (id &optional count)
   "Return a list of replied statuses starting from the status specified by ID.
 Statuses are stored in ascending-order with respect to their IDs."
   (let ((result nil)
@@ -4364,16 +4331,10 @@ Statuses are stored in ascending-order with respect to their IDs."
 				   "")))
 	       (unless (string= "" replied-id)
 		 (let ((replied-status (twittering-find-status replied-id)))
-		   (cond
-                    (replied-status
-		     (setq result (cons replied-status result))
+                   (when replied-status
+                     (setq result (cons replied-status result))
 		     (setq status replied-status)
-		     t)
-                    ((not twittering-default-retrieving-replied-tweets)
-                     nil)
-                    (t
-                     (twittering-fetch-replied-statuses buffer status)
-                     nil)))))))
+		     t))))))
     result))
 
 (defun twittering-have-replied-statuses-p (id)
@@ -4381,52 +4342,6 @@ Statuses are stored in ascending-order with respect to their IDs."
     (when status
       (let ((replied-id (cdr (assq 'in-reply-to-status-id status))))
 	(and replied-id (not (string= "" replied-id)))))))
-
-(defvar twittering-fetch-replied-fetching-status
-  (make-hash-table :test 'equal))
-
-(defun twittering-fetch-replied-statuses (buffer status)
-  (let* ((base-id (cdr (assq 'id status)))
-         (id (cdr (assq 'in-reply-to-status-id status)))
-         (user (cdr (assq 'in-reply-to-screen-name status))))
-    (cond
-     ((twittering-find-status id))
-     ((gethash id twittering-fetch-replied-fetching-status)) ;; do nothing
-     (t
-      (puthash id t twittering-fetch-replied-fetching-status)
-      (twittering-call-api 
-       'retrieve-timeline 
-       `((timeline-spec . (user ,user))
-         (timeline-spec-string . ,user)
-         (max_id . ,id)
-         (number . 50)
-         (clean-up-sentinel . twittering-fetch-replied-clean-up-sentinel))
-       ;; fake `twittering-add-statuses-to-timeline-data' spec
-       `((timeline-spec . (hide ,user))
-         (timeline-spec-string . ,user)
-         (originated-buffer . ,buffer)
-         (originated-id . ,base-id)
-         (target-id . ,id)))))))
-
-(defun twittering-fetch-replied-clean-up-sentinel (proc status connection-info)
-  (when (memq status '(exit signal closed failed))
-    (let ((buffer (cdr (assq 'originated-buffer connection-info)))
-          (base-id (cdr (assq 'originated-id connection-info)))
-          (id (cdr (assq 'target-id connection-info))))
-      (remhash id twittering-fetch-replied-fetching-status)
-      (when (buffer-live-p buffer)
-        (with-current-buffer buffer
-          (let ((status (twittering-find-status base-id)))
-            (cond
-             ((twittering-find-status id)
-              (ding)
-              (message "Done fetching reply to %s" 
-                       (cdr (assq 'text status))))
-             (t
-              (let ((visible-bell t))
-                (ding))
-              (message "Unable fetching reply to %s"
-                       (cdr (assq 'text status)))))))))))
 
 (defun twittering-add-statuses-to-timeline-data (statuses &optional spec)
   (let* ((spec (or spec (twittering-current-timeline-spec)))
