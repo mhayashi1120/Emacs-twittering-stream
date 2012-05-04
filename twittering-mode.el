@@ -5861,13 +5861,19 @@ references. This function decodes them."
 	  (twittering-ucs-to-char (string-to-number number-entity)))))
      encoded-str))
    (t
-    (replace-regexp-in-string
-     "&\\(?:\\(gt\\)\\|\\(lt\\)\\);"
-     (lambda (str)
-       (if (match-beginning 1)
-	   ">"
-	 "<"))
-     encoded-str))))
+    (setq encoded-str (replace-regexp-in-string "&amp;" "&" encoded-str))
+    (setq encoded-str (replace-regexp-in-string
+                       "&\\(?:\\(gt\\)\\|\\(lt\\)\\|\\(quot\\)\\);"
+                       (lambda (str)
+                         (cond
+                          ((match-string 1 str)
+                           ">")
+                          ((match-string 2 str)
+                           "<")
+                          ((match-string 3 str)
+                           "'")))
+                       encoded-str))
+    encoded-str)))
 
 (defun twittering-decode-html-entities (encoded-str)
   (if encoded-str
@@ -7258,8 +7264,8 @@ following symbols;
 	   (entities (cdr (assq 'entity status))))
       ;; hashtags
       (mapc (lambda (hashtag)
-	      (let* ((start (cdr (assq 'start hashtag)))
-		     (end (min (cdr (assq 'end hashtag)) text-length))
+	      (let* ((end (min (cdr (assq 'end hashtag)) text-length))
+		     (start (min (cdr (assq 'start hashtag)) end))
 		     (tag (cdr (assq 'text hashtag)))
 		     (spec-string
 		      (twittering-make-hashtag-timeline-spec-string-direct tag)))
