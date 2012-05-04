@@ -20,6 +20,11 @@
   scroll-modeが有効であったときのように振舞います。最新のtweetに追従す
   るには、timelineバッファの最新側のヘッダもしくはフッタ上にカーソルを
   置いてください。
+* "C-cD"の代替として"C-cC-w"を導入
+  これまで、"C-cD"がtweet削除用関数'twittering-delete-status'にbindさ
+  れていました。しかしこのキーはEmacsのKey Binding Conventionsに則って
+  いません。そこでその代替として"C-cC-w"を同関数にbindしました。"C-cD"
+  も有効ですが、"C-cC-w"の使用を推奨します。
 
 ### 改良
 * 現在のtimelineに応じたedit skeleton
@@ -208,6 +213,14 @@
     て、そのreplyの系列が全て展開表示されている場合、展開表示をとりや
     めます。
   - カーソルがreply系列内のtweetを指していない場合、何もしません。
+* 編集バッファ用を開く方法の設定
+  新たに変数`twittering-pop-to-buffer-function'を追加しました。この変
+  数は編集バッファを開く方法を指定するものです。デフォルトの値は関数
+  `twittering-pop-to-buffer-in-bottom-largest-window'となっています。
+  この関数は現在のフレーム内で最下段にあるウィンドウの内、面積最大のも
+  のを分割することで編集バッファ用のウィンドウを確保します。他にも、関
+  数`twittering-pop-to-buffer-in-current-window'を指定することもできま
+  す。この関数は現在のウィンドウを分割してウィンドウを確保します。
 
 ### バグ修正
 * 認証成功・失敗についてのメッセージが表示されるよう修正

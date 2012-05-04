@@ -1,3 +1,71 @@
+2012-04-02  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* README.markdown: Fix the order of tags.
+
+2012-04-01  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* README.markdown: Fix the explanation of the key binding 'd'.
+
+	* README.markdown: Add an explanation how to post an
+	official/native retweet.
+
+	* README.markdown: Add basic key bindings to the 'Quick start'
+	section.
+
+	* twittering-mode.el: Bind "C-cC-w" to
+	`twittering-delete-status'. The binding is a future replacement
+	for "C-cD", which violates the Emacs Key Binding Conventions.
+	(twittering-mode-map): bind "C-cC-w" to the function
+	`twittering-delete-status'.
+	* README.markdown: Fix the documents related to "C-cD".
+
+	* twittering-mode.el: Add a new variable
+	`twittering-pop-to-buffer-function' to specify how to open a
+	window for an edit buffer. Previously, a window for an edit buffer
+	was opened by invoking the function `pop-to-buffer' with
+	specifying non-nil as the argument NORECORD. This was an ad-hoc
+	solution of the problem that an edit buffer was assigned on a
+	different window for each time. However, with the solution, a
+	window for an edit buffer might be hidden by opening another
+	window because the window for an edit buffer was not recorded in
+	the list of recently selected windows. To avoid the behavior, new
+	functions open a window with a fixed rule and record a new window
+	in the list.
+	(twittering-pop-to-buffer-function): new variable.
+	(twittering-pop-to-buffer): new function, which just invokes the
+	function specified by `twittering-pop-to-buffer-function'.
+	(twittering-pop-to-buffer-simple): new function for the new
+	variable `twittering-pop-to-buffer-function'.
+	(twittering-pop-to-buffer-in-current-window): likewise.
+	(twittering-pop-to-buffer-in-largest-window): likewise.
+	(twittering-pop-to-buffer-in-bottom-largest-window): likewise.
+	(twittering-update-status-from-pop-up-buffer): use
+	`twittering-pop-to-buffer' instead of invoking `pop-to-buffer'
+	directly.
+
+2012-03-27  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Fix the filename of the footer line.
+
+	* twittering-mode.el: Fix the calculation of length of a tweet
+	including a URL.
+	(twittering-effective-length): always use the length retrieved by
+	'help/configuration' API. The function previously used the minimum
+	of the length by the API and the original length. This causes
+	failure in posting a tweet because the t.co URL wrapper
+	automatically wraps all links as of October 10, 2011.
+
+	* README.markdown: Fix a typo.
+
+	* README.markdown: Update the document.
+
+	* twittering-mode.el: Ensure that a pop-up edit buffer is
+	initially marked as unmodified.
+	(twittering-update-status-from-pop-up-buffer): mark the pop-up
+	edit buffer as unmodified. Since the help is rendered as a
+	read-only text, the buffer must be marked as unmodified
+	explicitly.
+
 2012-03-17  Tadashi MATSUO  <tad@mymail.twin.jp>
 
 	* twittering-mode.el: Fix the condition of confirmation on posting
