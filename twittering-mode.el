@@ -2418,9 +2418,19 @@ If BUFFER is nil, the current buffer is used instead."
 	(when status
 	  (twittering-add-statuses-to-timeline-data `(,status) '(:single))
 	  (let ((buffer (cdr (assq 'buffer connection-info)))
+		(spec (cdr (assq 'timeline-spec connection-info)))
 		(prop
 		 (cdr (assq 'property-to-be-redisplayed connection-info))))
-	    (when (and buffer prop (buffer-live-p buffer))
+	    (cond
+	     (spec
+	      ;; The process has been invoked via `twittering-call-api' with
+	      ;; the command `retrieve-timeline', not the command
+	      ;; `retrieve-single-tweet'.
+	      (let ((new-statuses `(,status))
+		    (buffer (twittering-get-buffer-from-spec spec)))
+		(when (and new-statuses buffer)
+		  (twittering-render-timeline buffer new-statuses t))))
+	     ((and buffer prop (buffer-live-p buffer))
 	      (twittering-redisplay-status-on-each-buffer buffer prop)
 	      (with-current-buffer buffer
 		(save-excursion
@@ -2432,7 +2442,7 @@ If BUFFER is nil, the current buffer is used instead."
 			 ;; Remove the property required no longer.
 			 (remove-text-properties beg end `(,prop nil))
 			 (goto-char beg)
-			 (twittering-render-replied-statuses))))))))))
+			 (twittering-render-replied-statuses)))))))))))
 	(cond
 	 ((string= status-code "403")
 	  (format "You are not authorized to see this tweet (ID %s)." id))
@@ -3775,8 +3785,10 @@ Before calling this, you have to configure `twittering-bitly-login' and
 ;;; - (retweeted_to_user USER): retweets posted to the user.
 ;;; - (retweets_of_me):
 ;;;     tweets of the authenticated user that have been retweeted by others.
+;;; - (single ID): the single tweet specified by ID.
 ;;;
 ;;; - (search STRING): the result of searching with query STRING.
+;;;
 ;;; - (exclude-if FUNC SPEC):
 ;;;     the same timeline as SPEC, except that it does not include tweets
 ;;;     that FUNC returns non-nil for.
@@ -3785,7 +3797,6 @@ Before calling this, you have to configure `twittering-bitly-login' and
 ;;;     that matches the regular expression specified by REGEXP-STRING.
 ;;;
 ;;; - (merge SPEC1 SPEC2 ...): result of merging timelines SPEC1 SPEC2 ...
-;;; - (filter REGEXP SPEC): timeline filtered with REGEXP.
 ;;;
 
 ;;; Timeline spec string
@@ -3793,9 +3804,10 @@ Before calling this, you have to configure `twittering-bitly-login' and
 ;;; SPEC ::= PRIMARY | COMPOSITE
 ;;; PRIMARY ::= USER | LIST | DIRECT_MESSSAGES | DIRECT_MESSSAGES_SENT
 ;;;             | FRIENDS | HOME | MENTIONS | PUBLIC | REPLIES
-;;;             | RETWEETED_BY_ME | RETWEETED_TO_ME | RETWEETS_OF_ME
+;;;             | RETWEETED_BY_ME | RETWEETED_BY_USER
+;;;             | RETWEETED_TO_ME | RETWEETED_TO_USER | RETWEETS_OF_ME
 ;;;             | SEARCH
-;;; COMPOSITE ::= MERGE | FILTER
+;;; COMPOSITE ::= EXCLUDE-IF | EXCLUDE-RE | MERGE
 ;;;
 ;;; USER ::= /[a-zA-Z0-9_-]+/
 ;;; LIST ::= USER "/" LISTNAME
@@ -3813,6 +3825,8 @@ Before calling this, you have to configure `twittering-bitly-login' and
 ;;; RETWEETED_TO_ME ::= ":retweeted_to_me"
 ;;; RETWEETED_TO_USER ::= ":retweeted_to_user/" USER
 ;;; RETWEETS_OF_ME ::= ":retweets_of_me"
+;;; SINGLE ::= ":single/" ID
+;;; ID ::= /[0-9]+/
 ;;;
 ;;; SEARCH ::= ":search/" QUERY_STRING "/"
 ;;; QUERY_STRING ::= any string, where "/" is escaped by a backslash.
@@ -3823,7 +3837,6 @@ Before calling this, you have to configure `twittering-bitly-login' and
 ;;;
 ;;; MERGE ::= "(" MERGED_SPECS ")"
 ;;; MERGED_SPECS ::= SPEC | SPEC "+" MERGED_SPECS
-;;; FILTER ::= ":filter/" REGEXP "/" SPEC
 ;;;
 
 (defvar twittering-regexp-hash
@@ -3863,6 +3876,7 @@ If SHORTEN is non-nil, the abbreviated expression will be used."
      ((eq type 'retweeted_to_me) ":retweeted_to_me")
      ((eq type 'retweeted_to_user) (concat ":retweeted_to_user/" (car value)))
      ((eq type 'retweets_of_me) ":retweets_of_me")
+     ((eq type 'single) (concat ":single/" (car value)))
      ((eq type 'search)
       (let ((query (car value)))
 	(concat ":search/"
@@ -3881,13 +3895,6 @@ If SHORTEN is non-nil, the abbreviated expression will be used."
 	    (print-level nil))
 	(concat ":exclude-re/"
 		(replace-regexp-in-string "/" "\\\\\/" regexp-str)
-		"/"
-		(twittering-timeline-spec-to-string spec))))
-     ((eq type 'filter)
-      (let ((regexp (car value))
-	    (spec (cadr value)))
-	(concat ":filter/"
-		(replace-regexp-in-string "/" "\\/" regexp nil t)
 		"/"
 		(twittering-timeline-spec-to-string spec))))
      ((eq type 'merge)
@@ -3962,6 +3969,10 @@ Return cons of the spec and the rest string."
 	(let ((user (match-string 1 str))
 	      (rest (substring str (match-end 0))))
 	  `((retweeted_to_user ,user) . ,rest)))
+       ((string-match "^:single/\\([0-9]+\\)" str)
+	(let ((id (match-string 1 str))
+	      (rest (substring str (match-end 0))))
+	  `((single ,id) . ,rest)))
        ((string= type "search")
 	(if (string-match "^:search/\\(\\(.*?[^\\]\\)??\\(\\\\\\\\\\)*\\)??/"
 			  str)
@@ -4025,20 +4036,6 @@ Return cons of the spec and the rest string."
 	 (t
 	  (error "\"%s\" has no valid regexp" str)
 	  nil)))
-       ((string= type "filter")
-	(if (string-match "^:filter/\\(\\(.*?[^\\]\\)??\\(\\\\\\\\\\)*\\)??/"
-			  str)
-	    (let* ((escaped-regexp (or (match-string 1 str) ""))
-		   (regexp (replace-regexp-in-string "\\\\/" "/"
-						     escaped-regexp nil t))
-		   (following (substring str (match-end 0)))
-		   (pair (twittering-extract-timeline-spec
-			  following unresolved-aliases))
-		   (spec (car pair))
-		   (rest (cdr pair)))
-	      `((filter ,regexp ,spec) . ,rest))
-	  (error "\"%s\" has no valid regexp" str)
-	  nil))
        (t
 	(error "\"%s\" is invalid as a timeline spec" str)
 	nil))))
@@ -4107,7 +4104,7 @@ Return nil if SPEC-STR is invalid as a timeline spec."
 (defun twittering-timeline-spec-primary-p (spec)
   "Return non-nil if SPEC is a primary timeline spec.
 `primary' means that the spec is not a composite timeline spec such as
-`filter' and `merge'."
+`merge'."
   (let ((primary-spec-types
 	 '(user list
 		direct_messages direct_messages_sent
@@ -4115,7 +4112,8 @@ Return nil if SPEC-STR is invalid as a timeline spec."
 		search
 		retweeted_by_me retweeted_by_user
 		retweeted_to_me retweeted_to_user
-		retweets_of_me))
+		retweets_of_me
+		single))
 	(type (car spec)))
     (memq type primary-spec-types)))
 
@@ -4309,6 +4307,12 @@ referring the former ID."
     (cond
      ((null spec)
       nil)
+     ((eq type 'single)
+      (let* ((id (cadr spec))
+	     (status (twittering-find-status id)))
+	(if status
+	    `(,status)
+	  nil)))
      ((memq type '(exclude-if exclude-re merge))
       (let ((primary-base-specs
 	     (twittering-get-primary-base-timeline-specs spec)))
@@ -4548,6 +4552,14 @@ Statuses are stored in ascending-order with respect to their IDs."
 	      (twittering-percent-encode (match-string 1 query-string)))
     (format "http://%s/search?q=%s"
 	    twittering-web-host (twittering-percent-encode query-string))))
+
+(defun twittering-extract-id-from-url (url-string)
+  "Extract the ID from URL-STRING.
+Return nil if URL-STRING cannot be interpreted as a URL pointing a tweet."
+  (when (string-match
+	 "\\`https?://twitter.com/\\(?:#!/\\)?[^/]+/status/\\([0-9]+\\)/?\\'"
+	 url-string)
+    (match-string 1 url-string)))
 
 ;;;;
 ;;;; Utility of status IDs
@@ -4793,6 +4805,14 @@ retrieve-single-tweet -- Retrieve a single tweet.
     id -- the ID of the tweet to be retrieved.
     username -- (optional) the screen name of the author of the tweet.
     format -- (optional) the symbol specifying the format.
+    sentinel -- (optional) the sentinel that processes the buffer consisting
+      of retrieved data.. This is used as an argument SENTINEL of
+      `twittering-send-http-request' via `twittering-http-get'.
+      If nil, `twittering-http-get-default-sentinel' is used.
+    clean-up-sentinel -- (optional) the clean-up sentinel that post-processes
+      the buffer associated to the process. This is used as an argument
+      CLEAN-UP-SENTINEL of `twittering-send-http-request' via
+      `twittering-http-get'.
 get-list-index -- Retrieve list names owned by a user.
   Valid key symbols in ARGS-ALIST:
     username -- the username.
@@ -4993,10 +5013,25 @@ get-service-configuration -- Get the configuration of the server.
 	   (sentinel (cdr (assq 'sentinel args-alist)))
 	   (clean-up-sentinel (cdr (assq 'clean-up-sentinel args-alist)))
 	   (additional-info `(,@additional-info (format . ,format))))
-      (if (and host method)
-	  (twittering-http-get host method parameters format-str
-			       additional-info sentinel clean-up-sentinel)
-	(error "Invalid timeline spec"))))
+      (cond
+       ((eq spec-type 'single)
+	(let ((id (cadr spec))
+	      (sentinel (or sentinel
+			    'twittering-retrieve-single-tweet-sentinel)))
+	  (if (twittering-find-status id)
+	      ;; If the status has already retrieved, do nothing.
+	      nil
+	    (twittering-call-api 'retrieve-single-tweet
+				 `((id . ,id)
+				   (format . ,format)
+				   (sentinel . ,sentinel)
+				   (clean-up-sentinel . ,clean-up-sentinel))
+				 additional-info))))
+       ((and host method)
+	(twittering-http-get host method parameters format-str
+			     additional-info sentinel clean-up-sentinel))
+       (t
+	(error "Invalid timeline spec")))))
    ((eq command 'retrieve-single-tweet)
     (let* ((id (cdr (assq 'id args-alist)))
 	   (user-screen-name (cdr (assq 'username args-alist)))
@@ -7400,6 +7435,7 @@ following symbols;
 			 'keymap twittering-mode-on-uri-map
 			 'uri url
 			 'uri-origin 'explicit-uri-in-tweet
+			 'expanded-uri expanded-url
 			 'face 'twittering-uri-face
 			 'front-sticky nil
 			 'rear-nonsticky t)))
@@ -9793,8 +9829,13 @@ Pairs of a key symbol and an associated value are following:
 	 (goto-spec (get-text-property (point) 'goto-spec))
 	 (screen-name-in-text
 	  (get-text-property (point) 'screen-name-in-text))
+	 (uri (or (get-text-property (point) 'expanded-uri)
+		  (get-text-property (point) 'uri)))
+	 (mentioned-id (when uri
+			 (twittering-extract-id-from-url uri)))
 	 (spec (cond (goto-spec goto-spec)
 		     (screen-name-in-text `(user ,screen-name-in-text))
+		     (mentioned-id `(single ,mentioned-id))
 		     (username `(user ,username))
 		     (t nil))))
     (if spec

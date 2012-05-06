@@ -1,3 +1,49 @@
+2012-05-06  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Add some timeline specs to the definition of
+	timeline spec strings.
+
+	* twittering-mode.el: Remove routines for the filter timeline.
+	(twittering-timeline-spec-to-string): remove routines for the
+	filter timeline.
+	(twittering-extract-timeline-spec): likewise.
+	(twittering-timeline-spec-primary-p): remove the mention to the
+	filter timeline from the docstring.
+	* test/test-twittering-mode.el: remove tests for the filter
+	timeline.
+
+	* twittering-mode.el: Fix the docstring of `twittering-call-api'.
+	(twittering-call-api): fix the docstring for the command
+	`retrieve-single-tweet'.
+
+	* twittering-mode.el: Support a `single tweet' timeline, which
+	consists of a tweet specified by its ID.
+	(twittering-retrieve-single-tweet-sentinel): support the retrieval
+	via `twittering-call-api' with the command `retrieve-timeline'.
+	(twittering-timeline-spec-to-string): support a `single tweet'
+	timeline spec.
+	(twittering-extract-timeline-spec): likewise.
+	(twittering-timeline-spec-primary-p): likewise.
+	(twittering-current-timeline-data): likewise.
+	(twittering-call-api): invoke the `retrieve-single-tweet' command
+	if the `retrieve-timeline' command is specified with a single
+	tweet timeline spec.
+	* test/test-twittering-mode.el: Add a test for a `single tweet'
+	timeline spec.
+	* README.markdown: Add an explanation for a `single tweet'
+	timeline spec.
+
+	* twittering-mode.el: Add the expanded uri to the url string as a
+	property if possible.
+	(twittering-make-fontified-tweet-text-with-entity): add the
+	expanded-uri property to the url string.
+
+	* twittering-mode.el: Visit a single tweet timeline via a URL of a
+	tweet.
+	(twittering-extract-id-from-url): new function.
+	(twittering-other-user-timeline): visit a single tweet timeline if
+	the cursor points to a URL of a tweet.
+
 2012-04-02  Tadashi MATSUO  <tad@mymail.twin.jp>
 
 	* README.markdown: Fix the order of tags.
