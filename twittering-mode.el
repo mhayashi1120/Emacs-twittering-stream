@@ -6503,8 +6503,9 @@ SPEC may be a timeline spec or a timeline spec string."
 	    (twittering-replace-spec-string-for-buffer buffer spec-string)
 	    (twittering-update-mode-line)
 	    buffer)
-	(let ((buffer (generate-new-buffer spec-string))
-	      (start-timer (null twittering-buffer-info-list)))
+	(let* ((name (format "*twmode %s" spec-string))
+               (buffer (generate-new-buffer name))
+               (start-timer (null twittering-buffer-info-list)))
 	  (add-to-list 'twittering-buffer-info-list buffer t)
 	  (with-current-buffer buffer
 	    (twittering-mode-setup spec-string)
