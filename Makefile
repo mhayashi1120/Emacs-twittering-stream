@@ -2,6 +2,7 @@
 EMACS ?= emacs
 
 DISTRIB_FILES = twittering-mode.el \
+		twittering+tab.el twittering-stream.el \
 		README README.ja \
 		NEWS NEWS.ja \
 		INSTALL INSTALL.ja \
@@ -20,7 +21,7 @@ check:
 	./test/run-test.sh -y
 
 clean : 
-	rm -f twittering-mode.elc README *.zip *.tar.gz
+	rm -f *.elc README *.zip *.tar.gz
 
 VERSION = $$(cat VERSION)
 DISTRIB_DIR = twittering-mode-$(VERSION)
