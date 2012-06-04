@@ -1,6 +1,9 @@
+;; * require imagemagick to display icon
+
 ;;TODO
 ;; * show unseen count or only unseen existence.
 ;; * manipulate by mouse.
+
 
 (require 'twittering-mode)
 
@@ -78,6 +81,13 @@
          (kill-local-variable 'header-line-format)))
      (twittering-get-buffer-list))
     (remove-hook 'twittering-mode-hook 'twittering+tab-initialize))))
+
+(defun twittering+tab-kill-buffer ()
+  (interactive)
+  (when (twittering-kill-buffer)
+    (let ((next (car (twittering-get-buffer-list))))
+      (when next
+	(switch-to-buffer next)))))
 
 (defun twittering+tab-initialize ()
   (setq header-line-format
@@ -178,7 +188,9 @@ cleared by a timer.")
 (defun twittering+tab-name (buffer breadth)
   (let* ((spec (buffer-local-value 'twittering-timeline-spec buffer))
          (tab (buffer-local-value 'twittering-timeline-spec-string buffer))
-         (icon (twittering+tab-spec-icon spec))
+         (icon (ignore-errors
+                 (and twittering-icon-mode window-system
+                      (twittering+tab-spec-icon spec))))
          icon-string)
     (when icon
       (setq icon-string (propertize "  " 'display icon))
@@ -238,21 +250,24 @@ cleared by a timer.")
 (defvar twittering+tab--icon-hash (make-hash-table :test 'equal))
 
 (defun twittering+tab-spec-icon (spec)
-  (when (eq (car spec) 'user)
-    (let ((name (cadr spec)))
-      (or (gethash name twittering+tab--icon-hash)
-          (let ((image (twittering+tab--user-image name)))
-            (when image
-              ;; create square icon fit to tab height.
-              (let* ((twittering-convert-fix-size (frame-char-height))
-                     (data (plist-get (cdr image) :data))
-                     (icon-data (twittering-convert-image-data
-                                 data twittering-fallback-image-format))
-                     (icon (create-image icon-data nil t
-                                         :margin 0
-                                         :ascent 'center)))
-                (puthash name icon twittering+tab--icon-hash)
-                icon)))))))
+  (cond
+   ((memq (car spec) '(user favorites retweeted_to_user retweeted_by_user))
+    (twittering+tab--user-icon (cadr spec)))))
+
+(defun twittering+tab--user-icon (name)
+  (or (gethash name twittering+tab--icon-hash)
+      (let ((image (twittering+tab--user-image name)))
+        (when image
+          ;; create square icon fit to tab height.
+          (let* ((twittering-convert-fix-size (frame-char-height))
+                 (data (plist-get (cdr image) :data))
+                 (icon-data (twittering-convert-image-data
+                             data twittering-fallback-image-format))
+                 (icon (create-image icon-data nil t
+                                     :margin 0
+                                     :ascent 'center)))
+            (puthash name icon twittering+tab--icon-hash)
+            icon)))))
 
 (defun twittering+tab--user-image (user)
   (loop with image
@@ -272,5 +287,8 @@ cleared by a timer.")
       (setq pos (twittering-get-next-status-head pos)))
     (when pos
       (get-text-property pos 'display))))
+
+;; activate
+(twittering+tab-mode 1)
 
 (provide 'twittering+tab)
