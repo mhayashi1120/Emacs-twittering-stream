@@ -188,7 +188,7 @@ cleared by a timer.")
 (defun twittering+tab-name (buffer breadth)
   (let* ((spec (buffer-local-value 'twittering-timeline-spec buffer))
          (tab (buffer-local-value 'twittering-timeline-spec-string buffer))
-         (icon (ignore-errors 
+         (icon (ignore-errors
                  (and twittering-icon-mode window-system
                       (twittering+tab-spec-icon spec))))
          icon-string)
