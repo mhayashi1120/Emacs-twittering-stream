@@ -3910,7 +3910,7 @@ If SHORTEN is non-nil, the abbreviated expression will be used."
   (defmacro twittering-make-list-timeline-spec-direct (owner listname)
     `(list 'list ,owner ,listname))
   (defmacro twittering-make-hashtag-timeline-spec-direct (tag)
-    `(list 'search (concat "#" ,tag)))
+    `(list 'search (concat "#" ,tag " -RT")))
   (defmacro twittering-make-hashtag-timeline-spec-string-direct (tag)
     `(concat "#" ,tag)))
 
