@@ -1,3 +1,66 @@
+2012-11-05  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Support the backward retrieval of favorites
+	timeline.
+	(twittering-call-api): send the parameter `max_id' for retrieving
+	favorites timeline if necessary.
+
+	* twittering-mode.el: Display how many tweets are added to each
+	buffer.
+	(twittering-http-get-default-sentinel): display how many tweets
+	are added to each buffer.
+	(twittering-add-statuses-to-timeline-data): return a list of pairs
+	of a timeline spec string and the number of addtional tweets.
+	(twittering-render-timeline): return a list of tweets newly
+	rendered.
+
+	* twittering-mode.el: Extract the format from the HTTP response
+	header.
+	(twittering-get-content-subtype-symbol-from-header-info): new
+	function for extracting the content subtype from a HTTP header.
+	(twittering-send-http-request): fix docstring.
+	(twittering-get-error-message): extract the format from the HTTP
+	response header instead of using `connection-info`.
+	(twittering-http-get-default-sentinel): likewise.
+	(twittering-retrieve-single-tweet-sentinel): likewise.
+
+2012-09-17  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Request a compressed HTTP response when
+	using `curl'.
+	(twittering-send-http-request-curl): add the option `--compressed'
+	to the arguments for the program `curl'.
+
+	* twittering-mode.el: Do not call `force-mode-line-update' via the
+	unread status notifier. It had been invoked via a sentinel or
+	`post-command-hook'.
+	(twittering-set-number-of-unread): do not call the function
+	`force-mode-line-update'.
+
+	* twittering-mode.el: Add a new function
+	`twittering-retrieve-timeline'.
+	(twittering-retrieve-timeline): new function for retrieving and
+	rendering a timeline. This accepts any timeilne spec string
+	including that for composite timeline, though
+	`twittering-call-api' accepts only a primary timeline. Also, the
+	new function can be invoked with more detailed retrieval options
+	than the existing function `twittering-get-and-render-timeline'.
+	(twittering-get-and-render-timeline): reimplemented with the new
+	function `twittering-retrieve-timeline'.
+
+	* twittering-mode.el: Add a new command
+	`twittering-get-tweets-before' to get tweets before a
+	specific time.
+	(twittering-parse-time-string): new function.
+	(twittering-time-to-id): new function.
+	(twittering-get-tweets-within-specific-time-range): new function.
+	(twittering-get-tweets-before): new function.
+
+	* twittering-mode.el: Display how many tweets are retrieved.
+	(twittering-http-get-default-sentinel): display how many tweets
+	are retrieved. This may includes some tweets that has been already
+	retrieved as an other timeline.
+
 2012-07-22  Tadashi MATSUO  <tad@mymail.twin.jp>
 
 	* twittering-mode.el: Clear list of undo entries on a pop-up edit
