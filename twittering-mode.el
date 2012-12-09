@@ -5988,18 +5988,6 @@ references. This function decodes them."
 	  (twittering-ucs-to-char (string-to-number number-entity)))))
      encoded-str))
    (t
-    (setq encoded-str (replace-regexp-in-string "&amp;" "&" encoded-str))
-    (setq encoded-str (replace-regexp-in-string
-                       "&\\(?:\\(gt\\)\\|\\(lt\\)\\|\\(quot\\)\\);"
-                       (lambda (str)
-                         (cond
-                          ((match-string 1 str)
-                           ">")
-                          ((match-string 2 str)
-                           "<")
-                          ((match-string 3 str)
-                           "'")))
-                       encoded-str))
     encoded-str)))
 
 (defun twittering-decode-html-entities (encoded-str)
@@ -7459,7 +7447,19 @@ following symbols;
 		  (setq offset
 			(+ offset (- (length expanded-url) (- end start))))))
 	      (cdr (assq 'urls entities))))
-      text)))
+      (replace-regexp-in-string
+       "&\\(?:\\(gt\\)\\|\\(lt\\)\\|\\(quot\\)\\|\\(amp\\)\\);"
+       (lambda (str)
+	 (cond
+	  ((match-string 1 str)
+	   ">")
+	  ((match-string 2 str)
+	   "<")
+	  ((match-string 3 str)
+	   "'")
+	  ((match-string 4 str)
+	   "&")))
+       text))))
 
 (defun twittering-generate-format-table (status-sym prefix-sym)
   `(("%" . "%")
