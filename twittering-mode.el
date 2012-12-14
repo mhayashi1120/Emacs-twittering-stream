@@ -7558,8 +7558,15 @@ following symbols;
 		  (setq offset
 			(+ offset (- (length expanded-url) (- end start))))))
 	      (cdr (assq 'urls entities))))
+      text))
+
+  (defsubst twittering-make-display-text (status)
+    (let* ((fontified
+	    (twittering-make-fontified-tweet-text-with-entity status))
+	   ;; restore from doubly escaped.
+	   (text (replace-regexp-in-string "&amp;" "&" fontified)))
       (replace-regexp-in-string
-       "&\\(?:\\(gt\\)\\|\\(lt\\)\\|\\(quot\\)\\|\\(amp\\)\\);"
+       "&\\(?:\\(gt\\)\\|\\(lt\\)\\|\\(quot\\)\\);"
        (lambda (str)
 	 (cond
 	  ((match-string 1 str)
@@ -7567,9 +7574,7 @@ following symbols;
 	  ((match-string 2 str)
 	   "<")
 	  ((match-string 3 str)
-	   "'")
-	  ((match-string 4 str)
-	   "&")))
+	   "'")))
        text))))
 
 (defun twittering-generate-format-table (status-sym prefix-sym)
@@ -7652,11 +7657,11 @@ following symbols;
       (cdr (assq 'user-screen-name ,status-sym)) ,status-sym))
     ("T" .
      ,(twittering-make-fontified-tweet-text
-       `(twittering-make-fontified-tweet-text-with-entity ,status-sym)
+       `(twittering-make-display-text ,status-sym)
        twittering-regexp-hash twittering-regexp-atmark))
     ("t" .
      ,(twittering-make-fontified-tweet-text
-       `(twittering-make-fontified-tweet-text-with-entity ,status-sym)
+       `(twittering-make-display-text ,status-sym)
        twittering-regexp-hash twittering-regexp-atmark))
     ("u" . (cdr (assq 'user-url ,status-sym)))))
 
