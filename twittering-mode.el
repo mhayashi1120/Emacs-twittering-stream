@@ -7733,7 +7733,6 @@ following symbols;
 	      (rest (substring following (match-end 0))))
 	  `((let* ((created-at (cdr (assq 'created-at ,status-sym)))
 		   (utc-offset (cdr (assq 'user-utc-offset ,status-sym))))
-	      (setq hoge ,status-sym)
 	      (twittering-make-string-with-uri-property
 	       (twittering-format-time ,time-format created-at utc-offset) ,status-sym))
 	    . ,rest)))
