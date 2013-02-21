@@ -1,3 +1,57 @@
+2013-02-11  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Fix the jojo-mode that caused an error when
+	the condition of automatically posting a tweet was satisfied.
+	Thanks to the anonymous person who reported the problem.
+	(twittering-post-predicted-message-like-jojo): fix variable name.
+
+	* twittering-mode.el: Fix a return value of
+	`twittering-render-replied-statuses'. The function returns nil
+	without regard to whether a tweet is rendered or not. Thanks to
+	Ikumi Keita who reported the problem.
+	(twittering-render-replied-statuses): fix a return value.
+
+	* twittering-mode.el: Support different intervals of retrieving
+	timelines.
+	(twittering-relative-retrieval-interval-alist): new variable.
+	(twittering-relative-retrieval-count-alist): new variable.
+	(twittering-retrieve-timeline): reset the retrieval count.
+	(twittering-start): update all active timelines forcibly once.
+	(twittering-get-relative-interval): new function.
+	(twittering-get-retrieval-count): new function.
+	(twittering-set-retrieval-count): new function.
+	(twittering-initialize-retrieval-count): new function.
+	(twittering-update-active-buffers): reduce retrievals according to
+	the variable `twittering-relative-retrieval-interval-alist'.
+
+2013-01-21  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Update the regexp for extracting an ID from
+	a tweet.
+	(twittering-extract-id-from-url): update the regexp for extracting
+	an ID from a tweet.
+
+	* twittering-mode.el: Avoid rendering same tweets repeatedly. The
+	function `twittering-render-timeline' rendered given repeated
+	tweets as is. Since a merged timeline may include one tweet
+	multiple times, such a tweet was rendered multiple times.
+	(twittering-render-timeline): skip repeated tweets.
+
+2013-01-14  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Fix a bug of backward retrieval of
+	favorites timeline. The functions, `twittering-goto-next-status'
+	and `twittering-goto-previous-status', did nothing for favorites
+	timeline. They now treat favorites timeline as they treat other
+	timelines. Thanks to the anonymous person who reported the
+	problem.
+	(twittering-goto-next-status): Remove a special action for
+	favorites timeline.
+	(twittering-goto-previous-status): likewise.
+
+	* README.markdown: Add explanations of major configurations and
+	others.
+
 2012-11-05  Tadashi MATSUO  <tad@mymail.twin.jp>
 
 	* twittering-mode.el: Support the backward retrieval of favorites
