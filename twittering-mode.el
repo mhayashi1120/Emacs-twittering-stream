@@ -82,6 +82,7 @@
 		     process-environment)))))
       ad-do-it)))
 (require 'url)
+(require 'json)
 
 (defconst twittering-mode-version "HEAD")
 (defconst twittering-mode-identity "$Id$")
@@ -558,7 +559,7 @@ pop-up buffer.")
 (defvar twittering-variables-stored-with-encryption
   '(twittering-oauth-access-token-alist))
 
-(defvar twittering-api-prefix "1/")
+(defvar twittering-api-prefix "1.1/")
 (defvar twittering-search-api-method "search")
 (defvar twittering-web-path-prefix "")
 
@@ -1012,8 +1013,8 @@ The server name is a string and the port number is an integer."
 	       (user . ,twittering-https-proxy-user)
 	       (password . ,twittering-https-proxy-password))))))
     (let ((info
-	   (car (delq nil
-                      (mapcar
+	   (car (remove nil
+			(mapcar
                        (lambda (entry)
                          (when (member scheme (car entry))
                            (let ((info (cdr entry)))
@@ -4022,6 +4023,8 @@ If SHORTEN is non-nil, the abbreviated expression will be used."
       (concat "("
 	      (mapconcat 'twittering-timeline-spec-to-string value "+")
 	      ")"))
+     ((eq type 'command)
+      (concat ":command/" (mapconcat 'identity value " ")))
      (t
       nil))))
 
@@ -4094,6 +4097,10 @@ Return cons of the spec and the rest string."
 	(let ((id (match-string 1 str))
 	      (rest (substring str (match-end 0))))
 	  `((single ,id) . ,rest)))
+       ((string-match "^:command/\\(.+\\)" str)
+	(let ((command (match-string 1str)))
+	  ;;TODO
+	  `((command ,command))))
        ((string= type "search")
 	(if (string-match "^:search/\\(\\(.*?[^\\]\\)??\\(\\\\\\\\\\)*\\)??/"
 			  str)
@@ -4234,7 +4241,7 @@ Return nil if SPEC-STR is invalid as a timeline spec."
 		retweeted_by_me retweeted_by_user
 		retweeted_to_me retweeted_to_user
 		retweets_of_me
-		single))
+		single command))
 	(type (car spec)))
     (memq type primary-spec-types)))
 
@@ -8338,7 +8345,7 @@ will be restored after rendering statuses."
 	      point-window-list)
 	(goto-char original-pos)))))
 
-(defun twittering-retrieve-timeline (spec-string noninteractive api-arguments additional-info &optional backward-favorite)
+(defun twittering-retrieve-timeline (spec-string noninteractive api-arguments additional-info)
   "Retrieve and render a timeline specified by SPEC-STRING.
 Retrieve a timeline specified by SPEC-STRING, which must be a timeline spec
 string. Any timeline spec string including that for composite timeline can be
@@ -8424,8 +8431,11 @@ API-ARGUMENTS is also sent to `twittering-call-api' as its argument
 	 (args `(,@(cond
 		    (id `((max_id . ,id)))
 		    (since_id `((since_id . ,since_id)))
-		    (t nil)))))
-    (twittering-retrieve-timeline spec-string noninteractive args nil backward-favorite)))
+		    (t nil))
+		 ,@(when backward-favorite
+		     `((page . ,(number-to-string 
+				 (1+ (or twittering-favorites-timeline-page 1)))))))))
+    (twittering-retrieve-timeline spec-string noninteractive args nil)))
 
 ;;;;
 ;;;; Map function for statuses on buffer
