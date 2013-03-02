@@ -1013,15 +1013,15 @@ The server name is a string and the port number is an integer."
 	       (user . ,twittering-https-proxy-user)
 	       (password . ,twittering-https-proxy-password))))))
     (let ((info
-	   (car (delq nil
-                      (mapcar
-                       (lambda (entry)
-                         (when (member scheme (car entry))
-                           (let ((info (cdr entry)))
-                             (when (and (cdr (assq 'server info))
-                                        (cdr (assq 'port info)))
-                               info))))
-                       info-list)))))
+	   (car (remove nil
+			(mapcar
+			 (lambda (entry)
+			   (when (member scheme (car entry))
+			     (let ((info (cdr entry)))
+			       (when (and (cdr (assq 'server info))
+					  (cdr (assq 'port info)))
+				 info))))
+			 info-list)))))
       (if item
 	  (cdr (assq item info))
 	info))))
@@ -1029,13 +1029,13 @@ The server name is a string and the port number is an integer."
 (defun twittering-url-proxy-services ()
   "Return the current proxy configuration for `twittering-mode' in the format
 of `url-proxy-services'."
-  (delq nil (mapcar
-             (lambda (scheme)
-               (let ((server (twittering-proxy-info scheme 'server))
-                     (port (twittering-proxy-info scheme 'port)))
-                 (when (and server port)
-                   `(,scheme . ,(format "%s:%s" server port)))))
-             '("http" "https"))))
+  (remove nil (mapcar
+	       (lambda (scheme)
+		 (let ((server (twittering-proxy-info scheme 'server))
+		       (port (twittering-proxy-info scheme 'port)))
+		   (when (and server port)
+		     `(,scheme . ,(format "%s:%s" server port)))))
+	       '("http" "https"))))
 
 (defun twittering-find-proxy (scheme)
   "Find proxy server and its port from the environmental variables and return
@@ -1564,12 +1564,12 @@ The alist consists of pairs of field-name and field-value, such as
 		(http-version . ,(match-string 1 status-line))
 		(status-code . ,(match-string 2 status-line))
 		(reason-phrase . ,(match-string 3 status-line)))
-	      (delq nil
-                    (mapcar
-                     (lambda (line)
-                       (when (string-match "^\\([^: ]*\\): *\\(.*\\)$" line)
-                         (cons (match-string 1 line) (match-string 2 line))))
-                     header-lines))))))
+	      (remove nil
+		      (mapcar
+		       (lambda (line)
+			 (when (string-match "^\\([^: ]*\\): *\\(.*\\)$" line)
+			   (cons (match-string 1 line) (match-string 2 line))))
+		       header-lines))))))
 
 (defun twittering-get-content-subtype-symbol-from-header-info (header-info)
   "Return a symbol corresponding to the subtype of content-type."
@@ -1616,10 +1616,10 @@ The alist consists of pairs of field-name and field-value, such as
 	 (regexp "^[[:space:]]*charset=utf-8[[:space:]]*$")
 	 (encoded-with-utf-8
 	  (let ((case-fold-search t))
-	    (delq nil
-                  (mapcar (lambda (entry)
-                            (string-match regexp entry))
-                          parameters)))))
+	    (remove nil
+		    (mapcar (lambda (entry)
+			      (string-match regexp entry))
+			    parameters)))))
     (when encoded-with-utf-8
       (decode-coding-region (point-min) (point-max) 'utf-8))))
 
@@ -1784,12 +1784,12 @@ The method to perform the request is determined from
 	     (require 'tls nil t))
     (unless twittering-tls-program
       (let ((programs
-	     (delq nil
-                   (mapcar (lambda (cmd)
-                             (when (string-match "\\`\\([^ ]+\\) " cmd)
-                               (when (executable-find (match-string 1 cmd))
-                                 cmd)))
-                           tls-program))))
+	     (remove nil
+		     (mapcar (lambda (cmd)
+			       (when (string-match "\\`\\([^ ]+\\) " cmd)
+				 (when (executable-find (match-string 1 cmd))
+				   cmd)))
+			     tls-program))))
 	(setq twittering-tls-program
 	      (if twittering-allow-insecure-server-cert
 		  (mapcar
@@ -1879,10 +1879,10 @@ The method to perform the request is determined from
     (cond
      ((and use-ssl args
 	   (car
-	    (delq nil
-                  (mapcar (lambda (cmd)
-                            (string-match "^\\(.*/\\)?gnutls-cli\\b" cmd))
-                          args))))
+	    (remove nil
+		    (mapcar (lambda (cmd)
+			      (string-match "^\\(.*/\\)?gnutls-cli\\b" cmd))
+			    args))))
       (with-current-buffer buffer
 	(save-excursion
 	  (goto-char (point-max))
@@ -1893,11 +1893,11 @@ The method to perform the request is determined from
 	      (delete-region beg end))))))
      ((and use-ssl args
 	   (car
-	    (delq nil
-                  (mapcar
-                   (lambda (cmd)
-                     (string-match "^\\(.*/\\)?openssl s_client\\b" cmd))
-                   args))))
+	    (remove nil
+		    (mapcar
+		     (lambda (cmd)
+		       (string-match "^\\(.*/\\)?openssl s_client\\b" cmd))
+		     args))))
       (with-current-buffer buffer
 	(save-excursion
 	  (goto-char (point-max))
@@ -2086,12 +2086,12 @@ The method to perform the request is determined from
 	  `("--save-headers"
 	    "--quiet"
 	    "--output-document=-"
-	    ,@(delq nil
-                    (mapcar
-                     (lambda (pair)
-                       (unless (string= (car pair) "Host")
-                         (format "--header=%s: %s" (car pair) (cdr pair))))
-                     header-list))
+	    ,@(remove nil
+		      (mapcar
+		       (lambda (pair)
+			 (unless (string= (car pair) "Host")
+			   (format "--header=%s: %s" (car pair) (cdr pair))))
+		       header-list))
 	    ,@(when use-ssl
 		`(,(format "--ca-certificate=%s" cacert-file-body)))
 	    ,@(when (and use-ssl allow-insecure-server-cert)
@@ -3473,15 +3473,15 @@ after retrieval is completed and Emacs remains idle a certain time, which
 this variable specifies. The unit is second.")
 
 (defun twittering-remove-redundant-queries (queue)
-  (delq nil
-        (mapcar
-         (lambda (url)
-           (let ((current (gethash url twittering-url-data-hash)))
-             (when (or (null current)
-                       (and (integerp current)
-                            (< current twittering-url-request-retry-limit)))
-               url)))
-         (twittering-remove-duplicates queue))))
+  (remove nil
+	  (mapcar
+	   (lambda (url)
+	     (let ((current (gethash url twittering-url-data-hash)))
+	       (when (or (null current)
+			 (and (integerp current)
+			      (< current twittering-url-request-retry-limit)))
+		 url)))
+	   (twittering-remove-duplicates queue))))
 
 (defun twittering-resolve-url-request ()
   "Resolve requests of asynchronous URL retrieval."
@@ -4357,23 +4357,23 @@ If SPEC is a primary timeline and does not equal BASE-SPEC, return nil."
 	      (twittering-generate-composite-timeline direct-base
 						      base-spec base-statuses))
 	     (func (elt spec 1)))
-	(delq nil
-              (mapcar (lambda (status)
-                        (unless (funcall func status)
-                          status))
-                      direct-base-statuses))))
+	(remove nil
+		(mapcar (lambda (status)
+			  (unless (funcall func status)
+			    status))
+			direct-base-statuses))))
      ((eq type 'exclude-re)
       (let* ((direct-base (car (twittering-get-base-timeline-specs spec)))
 	     (direct-base-statuses
 	      (twittering-generate-composite-timeline direct-base
 						      base-spec base-statuses))
 	     (regexp (elt spec 1)))
-	(delq nil
-              (mapcar
-               (lambda (status)
-                 (unless (string-match regexp (cdr (assq 'text status)))
-                   status))
-               direct-base-statuses))))
+	(remove nil
+		(mapcar
+		 (lambda (status)
+		   (unless (string-match regexp (cdr (assq 'text status)))
+		     status))
+		 direct-base-statuses))))
      ((eq type 'merge)
       (sort
        (apply 'append
@@ -4569,23 +4569,23 @@ string and the number of new statuses for the timeline."
 	      (make-hash-table :test 'equal)))
 	 (timeline-data (twittering-current-timeline-data spec)))
     (let ((new-statuses
-	   (delq nil
-                 (mapcar
-                  (lambda (status)
-                    (let ((id (cdr (assq 'id status)))
-                          (retweeted-id (cdr (assq 'retweeted-id status))))
-                      (unless (or (not retweeted-id)
-                                  (gethash retweeted-id referring-id-table))
-                        ;; Store the id of the first observed tweet
-                        ;; that refers `retweeted-id'.
-                        (puthash retweeted-id id referring-id-table))
-                      (if (gethash id id-table)
-                          nil
-                        (puthash id status id-table)
-                        (puthash id id referring-id-table)
-                        `((source-spec . ,spec)
-                          ,@status))))
-                  statuses))))
+	   (remove nil
+		   (mapcar
+		    (lambda (status)
+		      (let ((id (cdr (assq 'id status)))
+			    (retweeted-id (cdr (assq 'retweeted-id status))))
+			(unless (or (not retweeted-id)
+				    (gethash retweeted-id referring-id-table))
+			  ;; Store the id of the first observed tweet
+			  ;; that refers `retweeted-id'.
+			  (puthash retweeted-id id referring-id-table))
+			(if (gethash id id-table)
+			    nil
+			  (puthash id status id-table)
+			  (puthash id id referring-id-table)
+			  `((source-spec . ,spec)
+			    ,@status))))
+		    statuses))))
       (when new-statuses
 	(let ((new-timeline-data
 	       (sort (append new-statuses timeline-data)
@@ -4883,12 +4883,12 @@ TIME must be an Emacs internal representation as a return value of
 		     new-entry-list))
       (setq twittering-server-info-alist
 	    (append header-info
-		    (delq nil (mapcar
-                               (lambda (entry)
-                                 (if (member (car entry) new-entry-list)
-                                     nil
-                                   entry))
-                               twittering-server-info-alist))))
+		    (remove nil (mapcar
+				 (lambda (entry)
+				   (if (member (car entry) new-entry-list)
+				       nil
+				     entry))
+				 twittering-server-info-alist))))
       (when twittering-display-remaining
 	(mapc (lambda (buffer)
 		(with-current-buffer buffer
@@ -5805,13 +5805,13 @@ If the authorization failed, return nil."
 
 (defun twittering-remove-timeline-spec-string-from-history (spec-string)
   (setq twittering-timeline-history
-	(delq nil
-              (mapcar
-               (lambda (str)
-                 (if (twittering-equal-string-as-timeline spec-string str)
-                     nil
-                   str))
-               twittering-timeline-history))))
+	(remove nil
+		(mapcar
+		 (lambda (str)
+		   (if (twittering-equal-string-as-timeline spec-string str)
+		       nil
+		     str))
+		 twittering-timeline-history))))
 
 (defun twittering-make-alist-of-forbidden-tweet (id &optional user-screen-name)
   (let ((created-at
@@ -6036,77 +6036,77 @@ GAP-LIST must be generated by `twittering-make-gap-list'."
 	      ;; hashtags
 	      (cons
 	       'hashtags
-	       (delq nil
-                     (mapcar
-                      (lambda (entry)
-                        (when (and (consp entry)
-                                   (eq 'hashtag (car entry)))
-                          (let* ((data (cdr entry))
-                                 (start-str (cdr (assq 'start (car data))))
-                                 (end-str (cdr (assq 'end (car data))))
-                                 (start (if (stringp start-str)
-                                            (string-to-number start-str)
-                                          0))
-                                 (end (if (stringp end-str)
-                                          (string-to-number end-str)
-                                        0))
-                                 (gap (twittering-get-gap start gap-list)))
-                            `((start . ,(- start gap))
-                              (end . ,(- end gap))
-                              (text . ,(elt (assq 'text data) 2))))))
-                      (assq 'hashtags entity-data))))
+	       (remove nil
+		       (mapcar
+			(lambda (entry)
+			  (when (and (consp entry)
+				     (eq 'hashtag (car entry)))
+			    (let* ((data (cdr entry))
+				   (start-str (cdr (assq 'start (car data))))
+				   (end-str (cdr (assq 'end (car data))))
+				   (start (if (stringp start-str)
+					      (string-to-number start-str)
+					    0))
+				   (end (if (stringp end-str)
+					    (string-to-number end-str)
+					  0))
+				   (gap (twittering-get-gap start gap-list)))
+			      `((start . ,(- start gap))
+				(end . ,(- end gap))
+				(text . ,(elt (assq 'text data) 2))))))
+			(assq 'hashtags entity-data))))
 	      ;; mentions
 	      (cons
 	       'mentions
-	       (delq nil
-                     (mapcar
-                      (lambda (entry)
-                        (when (and (consp entry)
-                                   (eq 'user_mention (car entry)))
-                          (let* ((data (cdr entry))
-                                 (start-str (cdr (assq 'start (car data))))
-                                 (end-str (cdr (assq 'end (car data))))
-                                 (start (if (stringp start-str)
-                                            (string-to-number start-str)
-                                          0))
-                                 (end (if (stringp end-str)
-                                          (string-to-number end-str)
-                                        0))
-                                 (gap (twittering-get-gap start gap-list)))
-                            `((start . ,(- start gap))
-                              (end . ,(- end gap))
-                              (id . ,(elt (assq 'id data) 2))
-                              (screen-name
-                               . ,(elt (assq 'screen_name data) 2))
-                              (name
-                               . ,(elt (assq 'name data) 2))))))
-                      (assq 'user_mentions entity-data))))
+	       (remove nil
+		       (mapcar
+			(lambda (entry)
+			  (when (and (consp entry)
+				     (eq 'user_mention (car entry)))
+			    (let* ((data (cdr entry))
+				   (start-str (cdr (assq 'start (car data))))
+				   (end-str (cdr (assq 'end (car data))))
+				   (start (if (stringp start-str)
+					      (string-to-number start-str)
+					    0))
+				   (end (if (stringp end-str)
+					    (string-to-number end-str)
+					  0))
+				   (gap (twittering-get-gap start gap-list)))
+			      `((start . ,(- start gap))
+				(end . ,(- end gap))
+				(id . ,(elt (assq 'id data) 2))
+				(screen-name
+				 . ,(elt (assq 'screen_name data) 2))
+				(name
+				 . ,(elt (assq 'name data) 2))))))
+			(assq 'user_mentions entity-data))))
 	      ;; urls
 	      (cons
 	       'urls
-	       (delq nil
-                     (mapcar
-                      (lambda (entry)
-                        (when (and (consp entry)
-                                   (eq 'url (car entry)))
-                          (let* ((data (cdr entry))
-                                 (start-str (cdr (assq 'start (car data))))
-                                 (end-str (cdr (assq 'end (car data))))
-                                 (start (if (stringp start-str)
-                                            (string-to-number start-str)
-                                          0))
-                                 (end (if (stringp end-str)
-                                          (string-to-number end-str)
-                                        0))
-                                 (gap (twittering-get-gap start gap-list)))
-                            `((start . ,(- start gap))
-                              (end . ,(- end gap))
-                              (url . ,(elt (assq 'url data) 2))
-                              (display-url
-                               . ,(elt (assq 'display_url data) 2))
-                              (expanded-url
-                               . ,(elt (assq 'expanded_url data) 2))))))
-                      (assq 'urls entity-data))))))
+	       (remove nil
+		       (mapcar
+			(lambda (entry)
+			  (when (and (consp entry)
+				     (eq 'url (car entry)))
+			    (let* ((data (cdr entry))
+				   (start-str (cdr (assq 'start (car data))))
+				   (end-str (cdr (assq 'end (car data))))
+				   (start (if (stringp start-str)
+					      (string-to-number start-str)
+					    0))
+				   (end (if (stringp end-str)
+					    (string-to-number end-str)
+					  0))
+				   (gap (twittering-get-gap start gap-list)))
+			      `((start . ,(- start gap))
+				(end . ,(- end gap))
+				(url . ,(elt (assq 'url data) 2))
+				(display-url
+				 . ,(elt (assq 'display_url data) 2))
+				(expanded-url
+				 . ,(elt (assq 'expanded_url data) 2))))))
+			(assq 'urls entity-data))))))
 	  ;; Source.
 	  ,@(let ((source (twittering-decode-html-entities
 			   (assq-get 'source status-data))))
@@ -6178,7 +6178,7 @@ GAP-LIST must be generated by `twittering-make-gap-list'."
 			   nil ,(caddr (assq 'recipient_screen_name c-node)))
 			  (user nil ,@(cdddr (assq 'sender c-node)))
 			  (entities nil ,@(cdddr (assq 'entities c-node)))))
-	       (delq nil
+	       (remove nil
 		       (mapcar
 			(lambda (node)
 			  (and (consp node) (eq 'direct_message (car node))
@@ -6193,9 +6193,9 @@ GAP-LIST must be generated by `twittering-make-gap-list'."
   (mapcar #'twittering-normalize-raw-status
  	  ;; quirk to treat difference between xml.el in Emacs21 and Emacs22
  	  ;; On Emacs22, there may be blank strings
-	  (delq nil (mapcar (lambda (x)
-                              (if (consp x) x))
-                            xmltree))))
+	  (remove nil (mapcar (lambda (x)
+				(if (consp x) x))
+			      xmltree))))
 
 (defun twittering-decode-entities-after-parsing-xml (encoded-str)
   "Decode ENCODED-STR retrieved by parsing XML and return the result.
@@ -6361,20 +6361,20 @@ To convert a JSON object from a search timeline, use
 		 (in_reply_to_status_id_str . in-reply-to-status-id)
 		 (recipient_screen_name . recipient-screen-name)
 		 (truncated . truncated))))
-	  (delq nil
-                (mapcar
-                 (lambda (entry)
-                   (let* ((sym (car entry))
-                          (value (cdr entry))
-                          (value
-                           (if (and (memq sym '(favorited truncated))
-                                    (eq value :json-false))
-                               nil
-                             value))
-                          (dest (cdr (assq sym symbol-table))))
-                     (when (and dest value)
-                       `(,dest . ,value))))
-                 json-object)))
+	  (remove nil
+		  (mapcar
+		   (lambda (entry)
+		     (let* ((sym (car entry))
+			    (value (cdr entry))
+			    (value
+			     (if (and (memq sym '(favorited truncated))
+				      (eq value :json-false))
+				 nil
+			       value))
+			    (dest (cdr (assq sym symbol-table))))
+		       (when (and dest value)
+			 `(,dest . ,value))))
+		   json-object)))
       ;; source
       ,@(let ((source (cdr (assq 'source json-object))))
 	  (if (and source
@@ -6403,20 +6403,20 @@ To convert a JSON object from a search timeline, use
 		(puthash id user-data twittering-user-data-table)
 	      (setq user-data (or (gethash id twittering-user-data-table)
 				  user-data))))
-	  (delq nil
-                (mapcar (lambda (entry)
-                          (let* ((sym (car entry))
-                                 (value (cdr entry))
-                                 (value
-                                  (if (and (eq sym 'protected)
-                                           (eq value :json-false))
-                                      nil
-                                    value)))
-                            (when value
-                              (let ((dest (cdr (assq sym symbol-table))))
-                                (when dest
-                                  `(,dest . ,value))))))
-                        user-data))))))
+	  (remove nil
+		  (mapcar (lambda (entry)
+			    (let* ((sym (car entry))
+				   (value (cdr entry))
+				   (value
+				    (if (and (eq sym 'protected)
+					     (eq value :json-false))
+					nil
+				      value)))
+			      (when value
+				(let ((dest (cdr (assq sym symbol-table))))
+				  (when dest
+				    `(,dest . ,value))))))
+			  user-data))))))
 
 (defun twittering-json-object-to-a-status-on-search (json-object)
   "Convert JSON-OBJECT representing a tweet into an alist representation.
@@ -6433,15 +6433,15 @@ To convert a JSON object from other timelines, use
 	       (profile_image_url . user-profile-image-url)
 	       (from_user_name . user-name)
 	       (from_user . user-screen-name))))
-	(delq nil
-	      (mapcar
-	       (lambda (entry)
-		 (let* ((sym (car entry))
-			(value (cdr entry))
-			(dest (cdr (assq sym symbol-table))))
-		   (when (and dest value)
-		     `(,dest . ,value))))
-	       json-object)))
+	(remove nil
+		(mapcar
+		 (lambda (entry)
+		   (let* ((sym (car entry))
+			  (value (cdr entry))
+			  (dest (cdr (assq sym symbol-table))))
+		     (when (and dest value)
+		       `(,dest . ,value))))
+		 json-object)))
     ;; source
     ,@(let ((source
 	     (twittering-decode-html-entities
@@ -6468,15 +6468,15 @@ To convert a JSON object from other timelines, use
     ,@(let ((symbol-table
 	     '((id_str . id)
 	       (recipient_screen_name . recipient-screen-name))))
-	(delq nil
-              (mapcar
-               (lambda (entry)
-                 (let* ((sym (car entry))
-                        (value (cdr entry))
-                        (dest (cdr (assq sym symbol-table))))
-                   (when (and dest value)
-                     `(,dest . ,value))))
-               json-object)))
+	(remove nil
+		(mapcar
+		 (lambda (entry)
+		   (let* ((sym (car entry))
+			  (value (cdr entry))
+			  (dest (cdr (assq sym symbol-table))))
+		     (when (and dest value)
+		       `(,dest . ,value))))
+		 json-object)))
     ;; sender
     ,@(let ((symbol-table
 	     '((id_str . user-id)
@@ -6485,26 +6485,26 @@ To convert a JSON object from other timelines, use
 	       (protected . user-protected)
 	       (screen_name . user-screen-name)
 	       (utc_offset . user-utc-offset))))
-	(delq nil
-              (mapcar
-               (lambda (entry)
-                 (let* ((sym (car entry))
-                        (value (cdr entry))
-                        (value
-                         (cond
-                          ((eq sym 'protected)
-                           (if (eq value :json-false)
-                               nil
-                             t))
-                          ((eq value :json-false)
-                           nil)
-                          (t
-                           value))))
-                   (when value
-                     (let ((dest (cdr (assq sym symbol-table))))
-                       (when dest
-                         `(,dest . ,value))))))
-               (cdr (assq 'sender json-object)))))))
+	(remove nil
+		(mapcar
+		 (lambda (entry)
+		   (let* ((sym (car entry))
+			  (value (cdr entry))
+			  (value
+			   (cond
+			    ((eq sym 'protected)
+			     (if (eq value :json-false)
+				 nil
+			       t))
+			    ((eq value :json-false)
+			     nil)
+			    (t
+			     value))))
+		     (when value
+		       (let ((dest (cdr (assq sym symbol-table))))
+			 (when dest
+			   `(,dest . ,value))))))
+		 (cdr (assq 'sender json-object)))))))
 
 ;;;;
 ;;;; List info retrieval
@@ -6569,12 +6569,12 @@ To convert a JSON object from other timelines, use
   "Return active buffers managed by `twittering-mode', where statuses are
 retrieved periodically."
   (twittering-unregister-killed-buffer)
-  (delq nil
-        (mapcar (lambda (buffer)
-                  (if (twittering-buffer-active-p buffer)
-                      buffer
-                    nil))
-                twittering-buffer-info-list)))
+  (remove nil
+	  (mapcar (lambda (buffer)
+		    (if (twittering-buffer-active-p buffer)
+			buffer
+		      nil))
+		  twittering-buffer-info-list)))
 
 (defun twittering-buffer-p (&optional buffer)
   "Return t if BUFFER is managed by `twittering-mode'.
@@ -8266,34 +8266,34 @@ This function returns a list of the statuses newly rendered by the invocation."
 	   (timeline-data
 	    ;; Collect visible statuses.
 	    (let ((prev-id nil))
-	      (delq nil
-		    (mapcar
-		     (lambda (status)
-		       (let ((id (cdr (assq 'id status)))
-			     (retweeted-id (cdr (assq 'retweeted-id status))))
-			 (if (twittering-status-id= prev-id id)
-			     ;; `status' is equivalent the previous one.
-			     nil
-			   (cond
-			    ((null retweeted-id)
-			     ;; `status' is not a retweet.
-			     status)
-			    ((and retweeted-id
-				  (twittering-status-id=
-				   id (gethash retweeted-id referring-id-table)))
-			     ;; `status' is the first retweet.
-			     status)
-			    ((null (gethash retweeted-id referring-id-table))
-			     ;; If the first ID referring the retweet is unknown,
-			     ;; render it.
-			     ;; This is necessary because a referring ID table
-			     ;; of a composite timeline may lack information of
-			     ;; some component timelines.
-			     status)
-			    (t
-			     ;; Otherwise, do not render it.
-			     nil)))))
-		     timeline-data))))
+	      (remove nil
+		      (mapcar
+		       (lambda (status)
+			 (let ((id (cdr (assq 'id status)))
+			       (retweeted-id (cdr (assq 'retweeted-id status))))
+			   (if (twittering-status-id= prev-id id)
+			       ;; `status' is equivalent the previous one.
+			       nil
+			     (cond
+			      ((null retweeted-id)
+			       ;; `status' is not a retweet.
+			       status)
+			      ((and retweeted-id
+				    (twittering-status-id=
+				     id (gethash retweeted-id referring-id-table)))
+			       ;; `status' is the first retweet.
+			       status)
+			      ((null (gethash retweeted-id referring-id-table))
+			       ;; If the first ID referring the retweet is unknown,
+			       ;; render it.
+			       ;; This is necessary because a referring ID table
+			       ;; of a composite timeline may lack information of
+			       ;; some component timelines.
+			       status)
+			      (t
+			       ;; Otherwise, do not render it.
+			       nil)))))
+		       timeline-data))))
 	   (timeline-data (if twittering-reverse-mode
 			      (reverse timeline-data)
 			    timeline-data))
@@ -8347,18 +8347,18 @@ This function returns a list of the statuses newly rendered by the invocation."
 	    (setq pos (twittering-get-first-status-head))))
 	  (goto-char pos)
 	  (let* ((rendered-tweets
-		  (delq nil
-                        (mapcar
-                         (lambda (status)
-                           (when (twittering-render-a-field
-                                  (point)
-                                  (twittering-make-field-id status)
-                                  (twittering-format-status status))
-                             (when twittering-default-show-replied-tweets
-                               (twittering-show-replied-statuses
-                                twittering-default-show-replied-tweets))
-                             status))
-                         timeline-data)))
+		  (remove nil
+			  (mapcar
+			   (lambda (status)
+			     (when (twittering-render-a-field
+				    (point)
+				    (twittering-make-field-id status)
+				    (twittering-format-status status))
+			       (when twittering-default-show-replied-tweets
+				 (twittering-show-replied-statuses
+				  twittering-default-show-replied-tweets))
+			       status))
+			   timeline-data)))
 		 (twittering-rendered-new-tweets
 		  (if twittering-reverse-mode
 		      (reverse rendered-tweets)
@@ -8906,11 +8906,11 @@ means the number of statuses retrieved after the last visiting of the buffer.")
 (defun twittering-make-unread-status-notifier-string ()
   "Generate a string that displays unread statuses."
   (setq twittering-unread-status-info
-	(delq nil
-              (mapcar (lambda (entry)
-                        (when (buffer-live-p (car entry))
-                          entry))
-                      twittering-unread-status-info)))
+	(remove nil
+		(mapcar (lambda (entry)
+			  (when (buffer-live-p (car entry))
+			    entry))
+			twittering-unread-status-info)))
   (let ((sum (apply '+ (mapcar 'cadr twittering-unread-status-info))))
     (if (= 0 sum)
 	""
@@ -9554,13 +9554,13 @@ entry in `twittering-edit-skeleton-alist' are performed.")
 		     "\\([a-zA-Z0-9_-]+\\)")
 	     text))
 	   (reduced-mentions
-	    (delq nil
-                  (mapcar
-                   (lambda (mention)
-                     (unless (or (string= mention recipient)
-                                 (string= mention (twittering-get-username)))
-                       mention))
-                   mentions))))
+	    (remove nil
+		    (mapcar
+		     (lambda (mention)
+		       (unless (or (string= mention recipient)
+				   (string= mention (twittering-get-username)))
+			 mention))
+		     mentions))))
       (when reduced-mentions
 	(let ((header (mapconcat (lambda (user) (concat "@" user))
 				 reduced-mentions " ")))
@@ -11063,9 +11063,9 @@ written in a tweet."
 			 ((listp current-face) (memq face current-face))
 			 ((symbolp current-face) (eq face current-face))
 			 (t nil)))))
-		(not (delq nil
-                           (mapcar face-pred '(twittering-username-face
-                                               twittering-uri-face))))))))
+		(not (remove nil
+			     (mapcar face-pred '(twittering-username-face
+						 twittering-uri-face))))))))
       (setq pos (funcall property-change-f pos property-sym)))
     pos))
 
