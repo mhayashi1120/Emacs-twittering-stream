@@ -1,3 +1,185 @@
+2013-03-05  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Bind a local variable correctly.
+	(twittering-call-api-with-account-in-api1.1): correctly bind the
+	variable `spec-string' used.
+
+	* twittering-mode.el: Fix the function parsing timelines related
+	to direct messages with the Twitter REST API v1.1.
+	(twittering-http-get-default-sentinel): call the function
+	`twittering-json-object-to-a-status-on-direct-messages' correctly
+	when using the Twitter REST API v1.1.
+
+	* twittering-mode.el: Correctly add an authentication header for
+	the command `get-service-configuration' with the Twitter REST API
+	v1.1.
+	(twittering-call-api-with-account-in-api1.1): fix a path for the
+	command `get-service-configuration' and add an authentication
+	header correctly.
+
+	* twittering-mode.el: Confirm that `json.el' and SSL are available
+	before calling the Twitter REST API v1.1.
+	(twittering-call-api-with-account): confirm that `json.el' and SSL
+	are available for the Twitter REST API v1.1.
+
+2013-03-04  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Use the JSON format for retrieving list
+	information if possible.
+	(twittering-http-get-list-sentinel-base): support a response in
+	the JSON format.
+	(twittering-call-api): use the JSON format for the commands
+	`get-list-index' and `get-list-subscriptions' if possible.
+
+	* twittering-mode.el: Use the JSON format for posting a status if
+	possible.
+	(twittering-http-post-destroy-status-sentinel): support a response
+	in the JSON format.
+	(twittering-call-api): use the JSON format for the command
+	`destroy-status' if possible.
+
+	* twittering-mode.el: Use the JSON format for retrieving server
+	configuration if possible.
+	(twittering-call-api): use the JSON format for the command
+	`get-service-configuration' if possible.
+	(twittering-update-service-configuration-sentinel): support a
+	response in the JSON format.
+
+	* twittering-mode.el: Sort newly retrieved tweets before rendering
+	them.
+	(twittering-add-statuses-to-timeline-data): sort added tweets
+	before rendering them. This is necessary because
+	`twittering-render-timeline' assumes that given tweets are
+	ordered.
+
+	* twittering-mode.el: Update the server information only when
+	receiving a response from a Twitter-like service. Other types of
+	responses such as image retrieval and URL shortening do not update
+	the info.
+	(twittering-send-http-request): do not invoke
+	`twittering-update-server-info' directly.
+	(twittering-http-get): modify the sentinel so that it also invokes
+	`twittering-update-server-info'.
+	(twittering-http-post): likewise.
+	(twittering-update-server-info): receive an alist HEADER-INFO
+	instead of a string HEADER-STR.
+
+	* twittering-mode.el: Add a new function
+	`twittering-call-api-with-account'.
+	(twittering-add-application-header-to-http-request): receive an
+	alist ACCOUNT-INFO for specifying an account.
+	(twittering-http-get): likewise.
+	(twittering-http-post): likewise.
+	(twittering-call-api): call the new function
+	`twittering-call-api-with-account' with the main account.
+	(twittering-call-api-with-account): new function. This requires an
+	account information alist which it calls an API with.
+	(twittering-get-main-account-info): new function.
+	(twittering-verify-credentials): use a return value of
+	`twittering-get-main-account-info' instead of using variables
+	directly.
+	(twittering-http-get-verify-credentials-sentinel): extract an
+	account information from the `account-info' element in
+	`connection-info'.
+
+	* twittering-mode.el: Add functions to make an authentication
+	string from an account-info alist.
+	(twittering-add-application-header-to-http-request): use new
+	functions for making an authentication string for a HTTP request.
+	(twittering-get-from-account-info): new function.
+	(twittering-make-basic-authentication-string): new function.
+	(twittering-make-oauth-authentication-string): new function.
+	(twittering-verify-credentials): rename `account-info-alist'
+	`account-info'.
+	(twittering-http-get-verify-credentials-sentinel): extract a
+	screen name and a password with the new function
+	`twittering-get-from-account-info'.
+
+	* twittering-mode.el: Access an account information indirectly.
+	(twittering-register-account-info): new function.
+	(twittering-get-username): use `twittering-get-main-account-info'
+	instead of using the variable `twittering-username' directly.
+	(twittering-get-password): likewise.
+	(twittering-verify-credentials): use the functions
+	`twittering-get-main-account-info' and
+	`twittering-register-account-info' instead of using variables
+	directly.
+	(twittering-http-get-verify-credentials-sentinel): store or
+	discard the validated account information with the new function
+	`twittering-register-account-info'.
+
+	* twittering-mode.el: Support the HTTP cookie.
+	(twittering-cookie-alist): new variable to store cookies for each
+	account.
+	(twittering-add-application-header-to-http-request): add a cookie
+	string if necessary.
+	(twittering-http-get): invoke `twittering-update-server-info' with
+	`connection-info' according to the modification  of the function.
+	(twittering-http-post): likewise.
+	(twittering-update-server-info): receive an alist CONNECTION-INFO
+	as a new argument and update `twittering-cookie-alist'. The new
+	argument is required to store cookies for each account.
+	(twittering-extract-cookie): new function to extract cookies from
+	a HTTP response header as an alist.
+	(twittering-make-cookie-string): new function to make a cookie
+	string for a HTTP request from the cookie information stored in
+	the variable `twittering-cookie-alist'.
+
+	* twittering-mode.el: Separate the current core of
+	`twittering-call-api-with-account' as a new function
+	`twittering-call-api-with-account-in-api1.0'.
+	(twittering-call-api-with-account): call a new function
+	`twittering-call-api-with-account-in-api1.0' instead of processing
+	a command directly.
+	(twittering-call-api-with-account-in-api1.0): new function.
+
+	* twittering-mode.el: Support the Twitter REST API v1.1.
+	(twittering-service-method): change the default service method.
+	(twittering-service-method-table): add entries for the new service
+	method `twitter-api-v1.1'.
+	(twittering-http-get-default-sentinel): switch parser according to
+	the service method and the timeline.
+	(twittering-http-get-list-sentinel-base): support a response from
+	the Twitter REST API v1.1.
+	(twittering-update-server-info): replace a header name for the
+	Twitter REST API v1.1 with that for the Twitter REST API
+	v1.0. This is an ad-hoc solution. Since each API method is
+	separately limited on the Twitter REST API v1.1, the rate limit
+	information should be managed for each API method.
+	(twittering-call-api-with-account): call a special function
+	according to the current `twittering-service-method'.
+	(twittering-call-api-with-account-in-api1.0): new function that is
+	the same as the previous `twittering-call-api-with-account'.
+	(twittering-call-api-with-account-in-api1.1): new function.
+	(twittering-update-service-configuration): support the new service
+	method `twitter-api-v1.1'.
+	(twittering-use-profile-image-api): add a supplementary document.
+	(twittering-effective-length): support the new service method
+	`twitter-api-v1.1'.
+	* README.markdown: Add an explanation of prerequisites for the
+	Twitter REST API v1.1.
+
+	* twittering-mode.el: Move the cursor to the tweet that will be
+	retrieved.
+	(twittering-toggle-or-retrieve-replied-statuses): move the cursor
+	to the tweet that will be retrieved.
+
+	* twittering-mode.el: The timeline spec string "@" means the
+	mentions timeline instead of the replies timeline.
+	(twittering-extract-timeline-spec): interpret the timeline spec
+	string "@" as the mentions timeline instead of the replies
+	timeline.
+
+	* twittering-mode.el: Fix a typo that disables twittering-mode.el
+	from retrieving the ":retweets_of_me" timeline.
+	(twittering-call-api-with-account-in-api1.1): fix a typo.
+
+	* twittering-mode.el: Fix the function of rendering a replied
+	tweet.
+	(twittering-retrieve-single-tweet-sentinel): fix the condition
+	for deciding whether it should re-render a tweet partially or
+	not.
+
 2013-02-11  Tadashi MATSUO  <tad@mymail.twin.jp>
 
 	* twittering-mode.el: Fix the jojo-mode that caused an error when
