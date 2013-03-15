@@ -584,8 +584,6 @@ StatusNet Service.")
 	       (search-url . twittering-get-search-url-statusnet)))
   "A list of alist of service methods.")
 
-(defvar twittering-favorites-timeline-page nil)
-
 (defvar twittering-timeline-header-face 'twittering-timeline-header-face
   "*Face for the header on `twittering-mode'.
 The face is used for rendering `twittering-timeline-header'.")
@@ -3650,19 +3648,6 @@ The retrieved data can be referred as (gethash URL twittering-url-data-hash)."
       (twittering-run-on-idle twittering-url-request-sentinel-delay
 			      sentinel url data)
       data))))
-
-(defun twittering-favorites-clean-up-sentinel (proc status connection-info)
-  (when (memq status '(exit signal closed failed))
-    (let* ((request (cdr (assq 'request connection-info)))
-           (params (cdr (assq 'encoded-query-alist request)))
-           (page (cdr (assoc "page" params)))
-           (spec (cdr (assq 'timeline-spec connection-info)))
-           (buffer (twittering-get-buffer-from-spec spec)))
-      (when (and (stringp page)
-                 (buffer-live-p buffer))
-        (with-current-buffer buffer
-          (setq twittering-favorites-timeline-page (string-to-number page)))))
-    (twittering-release-process proc)))
 
 ;;;;
 ;;;; XML parser
@@ -9149,7 +9134,7 @@ API-ARGUMENTS is also sent to `twittering-call-api' as its argument
       (let ((type (car spec)))
         (error "%s has not been supported yet" type))))))
 
-(defun twittering-get-and-render-timeline (&optional noninteractive id spec spec-string backward-favorite)
+(defun twittering-get-and-render-timeline (&optional noninteractive id spec spec-string)
   (let* ((spec (or spec (twittering-current-timeline-spec)))
 	 (spec-string
 	  (or spec-string (twittering-current-timeline-spec-string)))
@@ -9161,12 +9146,7 @@ API-ARGUMENTS is also sent to `twittering-call-api' as its argument
 	 (args `(,@(cond
 		    (id `((max_id . ,id)))
 		    (since_id `((since_id . ,since_id)))
-		    (t nil))
-		 ,@(when backward-favorite
-		     `((page . ,(number-to-string 
-				 (1+ (or twittering-favorites-timeline-page 1))))
-		       (clean-up-sentinel
-			. twittering-favorites-clean-up-sentinel))))))
+		    (t nil)))))
     (twittering-retrieve-timeline spec-string noninteractive args nil)))
 
 ;;;;
@@ -9994,7 +9974,6 @@ been initialized yet."
   (make-local-variable 'twittering-jojo-mode)
   (make-local-variable 'twittering-reverse-mode)
   (make-local-variable 'twittering-scroll-mode)
-  (make-local-variable 'twittering-favorites-timeline-page)
 
   (setq twittering-timeline-spec-string spec-string)
   (setq twittering-timeline-spec
@@ -11446,7 +11425,6 @@ The user is also blocked."
   (interactive)
   (when (twittering-buffer-p)
     (let ((spec (twittering-current-timeline-spec)))
-      (setq twittering-favorites-timeline-page nil)
       (twittering-remove-timeline-data spec) ;; clear current timeline.
       (twittering-rerender-timeline-all (current-buffer)) ;; clear buffer.
       (twittering-get-and-render-timeline))))
@@ -11573,9 +11551,6 @@ Return nil if no statuses are rendered."
 	     (oldest-id (cdr (assq 'id oldest-status)))
 	     (spec-type (car (twittering-current-timeline-spec))))
 	(cond
-	 ((eq spec-type 'favorites)
-	  (message "Get more of the previous favorites...")
-	  (twittering-get-and-render-timeline nil nil nil nil t))
 	 (oldest-id
 	  (message "Get more of the previous timeline...")
 	  ;; Here, the cursor points to the footer field or the end of
@@ -11621,9 +11596,6 @@ Otherwise, return a positive integer greater than POS."
 	     (oldest-id (cdr (assq 'id oldest-status)))
 	     (spec-type (car (twittering-current-timeline-spec))))
 	(cond
-	 ((eq spec-type 'favorites)
-	  (message "Get more of the previous favorites...")
-	  (twittering-get-and-render-timeline nil nil nil nil t))
 	 (oldest-id
 	  (message "Get more of the previous timeline...")
 	  ;; Here, the cursor points to the header field.
