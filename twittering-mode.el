@@ -5408,7 +5408,10 @@ get-service-configuration -- Get the configuration of the server.
 	     ((eq spec-type 'list)
 	      (twittering-api-path "lists/statuses"))
 	     ((eq spec-type 'favorites)
-	      (twittering-api-path "favorites/list"))
+ 	      (let ((user (elt spec 1)))
+ 		(if user
+ 		    (twittering-api-path "favorites/" user)
+ 		  (twittering-api-path "favorites"))))
 	     ((eq spec-type 'retweeted_by_user)
 	      (twittering-api-path "statuses/retweeted_by_user"))
 	     ((eq spec-type 'retweeted_to_user)
@@ -7556,8 +7559,7 @@ return nil."
 		    ;; on decoding a XPM image with opacity. To ignore
 		    ;; opacity, the option "+matte" is added.
 		    '("+matte"))
-		,@(unless (or (fboundp 'create-animated-image)
-                              (fboundp 'image-animate))
+		,@(unless (fboundp 'create-animated-image)
 		    '("-flatten"))
 		,(if src-type (format "%s:-" src-type) "-")
 		,@(when (integerp twittering-convert-fix-size)
@@ -7586,7 +7588,6 @@ available and `twittering-use-convert' is non-nil."
       twittering-error-icon-data-pair)
      ((and (image-type-available-p image-type)
 	   (or (fboundp 'create-animated-image)
-               (fboundp 'image-animate)
 	       (not (and twittering-use-convert
 			 (eq image-type 'gif))))
 	   (or (not (integerp twittering-convert-fix-size))
@@ -7645,7 +7646,10 @@ image are displayed."
 	 (slice-spec
 	  (when (and twittering-convert-fix-size (not twittering-use-convert))
 	    (twittering-make-slice-spec raw-image-spec)))
-	 (image-spec (twittering-create-image data type)))
+	 (image-spec
+	  (if (fboundp 'create-animated-image) ;; Emacs24 or later
+	      (create-animated-image data type t :margin 2 :ascent 'center)
+	    (create-image data type t :margin 2 :ascent 'center))))
     (if slice-spec
 	`(display (,image-spec ,slice-spec))
       `(display ,image-spec))))
@@ -8923,34 +8927,35 @@ This function returns a list of the statuses newly rendered by the invocation."
 	   (timeline-data
 	    ;; Collect visible statuses.
 	    (let ((prev-id nil))
-	      (remove nil
-		      (mapcar
-		       (lambda (status)
-			 (let ((id (cdr (assq 'id status)))
-			       (retweeted-id (cdr (assq 'retweeted-id status))))
-			   (if (twittering-status-id= prev-id id)
-			       ;; `status' is equivalent the previous one.
-			       nil
-			     (cond
-			      ((null retweeted-id)
-			       ;; `status' is not a retweet.
-			       status)
-			      ((and retweeted-id
-				    (twittering-status-id=
-				     id (gethash retweeted-id referring-id-table)))
-			       ;; `status' is the first retweet.
-			       status)
-			      ((null (gethash retweeted-id referring-id-table))
-			       ;; If the first ID referring the retweet is unknown,
-			       ;; render it.
-			       ;; This is necessary because a referring ID table
-			       ;; of a composite timeline may lack information of
-			       ;; some component timelines.
-			       status)
-			      (t
-			       ;; Otherwise, do not render it.
-			       nil)))))
-		       timeline-data))))
+	      (remove
+	       nil
+	       (mapcar
+		(lambda (status)
+		  (let ((id (cdr (assq 'id status)))
+			(retweeted-id (cdr (assq 'retweeted-id status))))
+		    (if (twittering-status-id= prev-id id)
+			;; `status' is equivalent the previous one.
+			nil
+		      (cond
+		       ((null retweeted-id)
+			;; `status' is not a retweet.
+			status)
+		       ((and retweeted-id
+			     (twittering-status-id=
+			      id (gethash retweeted-id referring-id-table)))
+			;; `status' is the first retweet.
+			status)
+		       ((null (gethash retweeted-id referring-id-table))
+			;; If the first ID referring the retweet is unknown,
+			;; render it.
+			;; This is necessary because a referring ID table
+			;; of a composite timeline may lack information of
+			;; some component timelines.
+			status)
+		       (t
+			;; Otherwise, do not render it.
+			nil)))))
+		timeline-data))))
 	   (timeline-data (if twittering-reverse-mode
 			      (reverse timeline-data)
 			    timeline-data))
@@ -9101,7 +9106,8 @@ API-ARGUMENTS is also sent to `twittering-call-api' as its argument
 	      `(,@api-arguments
 		(timeline-spec . ,spec)
 		(timeline-spec-string . ,spec-string)
-		(format . json)
+		(format . ,(when (require 'json nil t)
+			     'json))
 		(clean-up-sentinel
 		 . ,(lambda (proc status connection-info)
 		      (when (memq status '(exit signal closed failed))
