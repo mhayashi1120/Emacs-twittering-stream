@@ -82,7 +82,6 @@
 		     process-environment)))))
       ad-do-it)))
 (require 'url)
-(require 'json)
 
 (defconst twittering-mode-version "HEAD")
 (defconst twittering-mode-identity "$Id$")
@@ -566,7 +565,7 @@ pop-up buffer.")
 (defvar twittering-variables-stored-with-encryption
   '(twittering-oauth-access-token-alist))
 
-(defvar twittering-api-prefix "1.1/")
+(defvar twittering-api-prefix "1/")
 (defvar twittering-search-api-method "search")
 (defvar twittering-web-path-prefix "")
 
@@ -2453,6 +2452,7 @@ FORMAT is a response data format (\"xml\", \"atom\", \"json\")"
     (twittering-case-string
      status-code
      (("200")
+      (twittering-debug-printf "connection-info=%s" connection-info)
       (let* ((spec (cdr (assq 'timeline-spec connection-info)))
 	     (spec-string (cdr (assq 'timeline-spec-string connection-info)))
 	     (service-method (cdr (assq 'service-method connection-info)))
@@ -4627,8 +4627,8 @@ Statuses are stored in ascending-order with respect to their IDs."
 				   "")))
 	       (unless (string= "" replied-id)
 		 (let ((replied-status (twittering-find-status replied-id)))
-                   (when replied-status
-                     (setq result (cons replied-status result))
+		   (when replied-status
+		     (setq result (cons replied-status result))
 		     (setq status replied-status)
 		     t))))))
     result))
@@ -5386,14 +5386,14 @@ get-service-configuration -- Get the configuration of the server.
 	       ((eq spec-type 'search)
 		'atom)
 	       (t
-		'json))))
+		'xml))))
 	   (format-str (symbol-name format))
 	   (simple-spec-list
 	    '((direct_messages . "direct_messages")
 	      (direct_messages_sent . "direct_messages/sent")
 	      (friends . "statuses/friends_timeline")
 	      (home . "statuses/home_timeline")
-	      (mentions . "statuses/mentions_timeline")
+	      (mentions . "statuses/mentions")
 	      (public . "statuses/public_timeline")
 	      (replies . "statuses/replies")
 	      (retweeted_by_me . "statuses/retweeted_by_me")
