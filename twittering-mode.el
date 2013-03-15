@@ -4105,8 +4105,6 @@ If SHORTEN is non-nil, the abbreviated expression will be used."
 	      ")"))
      ((eq type 'command)
       (concat ":command/" (mapconcat 'identity value " ")))
-     ((eq type 'stream)
-      (concat ":stream/"  (mapconcat 'identity value "")))
      (t
       nil))))
 
@@ -4182,8 +4180,6 @@ Return cons of the spec and the rest string."
        ((string-match "^:command/\\(.+\\)" str)
 	(let ((command (match-string 1 str)))
 	  `((command ,command) . "")))
-       ((string-match "^:stream/user" str)
-	`((stream "user") . ""))
        ((string= type "search")
 	(if (string-match "^:search/\\(\\(.*?[^\\]\\)??\\(\\\\\\\\\\)*\\)??/"
 			  str)
@@ -4324,7 +4320,7 @@ Return nil if SPEC-STR is invalid as a timeline spec."
 		retweeted_by_me retweeted_by_user
 		retweeted_to_me retweeted_to_user
 		retweets_of_me
-		single command stream))
+		single command))
 	(type (car spec)))
     (memq type primary-spec-types)))
 
@@ -5341,8 +5337,6 @@ get-service-configuration -- Get the configuration of the server.
 	      `(
 		,@(when since_id `("--since-id" ,since_id))
 		,@(when max_id `("--max-id" ,max_id))))
-	     ((eq spec-type 'stream)
-	      )
 	     (t
 	      `(,@(when max_id `(("max_id" . ,max_id)))
 		,@(when since_id `(("since_id" . ,since_id)))
@@ -9118,8 +9112,6 @@ API-ARGUMENTS is also sent to `twittering-call-api' as its argument
               (twittering-call-api 'retrieve-timeline args additional-info)))
         (when proc
           (twittering-register-process proc spec spec-string))))
-     ((eq (car-safe spec) 'stream)
-      (message "Stream no need retrieving"))
      ((twittering-timeline-spec-primary-p spec)
       (let* ((args
 	      `(,@api-arguments
