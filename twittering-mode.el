@@ -5813,6 +5813,12 @@ get-service-configuration -- Get the configuration of the server.
 		  ("q" . ,word)
 		  ("result_type" . "mixed")
 		  ,@(when since_id `(("since_id" . ,since_id))))))
+	     ((eq spec-type 'command)
+	      (let ((word (elt spec 1)))
+		`(nil
+		  nil
+		  ,@(when since_id `("--since-id" ,since_id))
+		  ,@(when max_id `("--max-id" ,max_id)))))
 	     (t
 	      (error
 	       "Timeline spec %s is unknown"
@@ -5830,7 +5836,11 @@ get-service-configuration -- Get the configuration of the server.
 	   (id (cdr (assoc "id" http-parameters)))
 	   (sentinel (or sentinel
 			 (when (eq spec-type 'single)
-			   'twittering-retrieve-single-tweet-sentinel))))
+			   'twittering-retrieve-single-tweet-sentinel)))
+	   (command (cond
+		     ((eq spec-type 'command)
+		      (cadr spec))
+		     (t nil))))
       (cond
        ((null parameters)
 	nil)
@@ -5846,6 +5856,8 @@ get-service-configuration -- Get the configuration of the server.
 	(twittering-http-get account-info-alist host method http-parameters
 			     format-str
 			     additional-info sentinel clean-up-sentinel))
+       (command
+	(twittering-call-command command http-parameters additional-info))
        (t
 	(error "Invalid timeline spec")
 	nil))))
