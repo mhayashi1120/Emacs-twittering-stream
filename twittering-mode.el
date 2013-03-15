@@ -9096,22 +9096,6 @@ API-ARGUMENTS is also sent to `twittering-call-api' as its argument
      ((and noninteractive (twittering-process-active-p spec))
       ;; ignore non-interactive request if a process is waiting for responses.
       t)
-     ((eq (car-safe spec) 'favorites)
-      (let* ((args
-              `(,@api-arguments
-		(timeline-spec . ,spec)
-                (timeline-spec-string . ,spec-string)
-                (clean-up-sentinel
-                 . twittering-favorites-clean-up-sentinel)))
-             (additional-info
-              `(,@additional-info
-		(noninteractive . ,noninteractive)
-                (timeline-spec . ,spec)
-                (timeline-spec-string . ,spec-string)))
-             (proc
-              (twittering-call-api 'retrieve-timeline args additional-info)))
-        (when proc
-          (twittering-register-process proc spec spec-string))))
      ((twittering-timeline-spec-primary-p spec)
       (let* ((args
 	      `(,@api-arguments
@@ -9162,7 +9146,9 @@ API-ARGUMENTS is also sent to `twittering-call-api' as its argument
 		    (t nil))
 		 ,@(when backward-favorite
 		     `((page . ,(number-to-string 
-				 (1+ (or twittering-favorites-timeline-page 1)))))))))
+				 (1+ (or twittering-favorites-timeline-page 1))))
+		       (clean-up-sentinel
+			. twittering-favorites-clean-up-sentinel))))))
     (twittering-retrieve-timeline spec-string noninteractive args nil)))
 
 ;;;;
