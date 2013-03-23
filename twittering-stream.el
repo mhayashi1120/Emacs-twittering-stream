@@ -71,7 +71,9 @@ After the timeout, reconnect to stream immediately."
   (let ((proc (twittering-stream-active-process)))
     (when proc
       (process-put proc 'twittering-stream-suppress-reconnect t)
-      (twittering-stream-disconnect))))
+      (twittering-stream-disconnect)
+      (message "Disconnected from twitter stream. (%s)"
+               (current-time-string)))))
 
 (defun twittering-stream-disconnect ()
   (let ((proc (twittering-stream-active-process)))
@@ -157,11 +159,13 @@ After the timeout, reconnect to stream immediately."
 (defun twittering-stream-timeline-spec-primary-p (spec)
   (eq (car-safe spec) 'stream))
 
-(defun twittering-stream-prepare-buffer-maybe (spec buffer)
-  (when (eq (car-safe spec) 'stream)
-    ;; do nothing currently..
-    ;; todo kill buffer hook and disconnect from stream?
-    ))
+(defun twittering-stream-prepare-buffer-maybe (spec-or-string buffer)
+  (let ((spec (if (stringp spec-or-string)
+                  (car (twittering-stream-extract-timeline-spec spec-or-string))
+                spec-or-string)))
+    (when (eq (car-safe spec) 'stream)
+      (with-current-buffer buffer
+        (add-hook 'kill-buffer-hook 'twittering-stream-cleanup-buffer nil t)))))
 
 (defun twittering-stream-timeline-spec-to-string (timeline-spec)
   (let ((type (car timeline-spec))
@@ -172,6 +176,9 @@ After the timeout, reconnect to stream immediately."
 (defun twittering-stream-extract-timeline-spec (str)
   (and (string-match "^:stream/user" str)
        `((stream "user") . "")))
+
+(defun twittering-stream-cleanup-buffer ()
+  (twittering-stream-shutdown))
 
 ;;;
 ;;; wget implementation
@@ -229,7 +236,7 @@ After the timeout, reconnect to stream immediately."
         (set-process-sentinel proc 'twittering-stream--sentinel)))))
 
 (defun twittering-stream--create-wgetrc (alist)
-  ;;TODO do not consider about coding-system
+  ;;TODO do not consider about coding-system?
   (let* ((prefix (expand-file-name "twmode-wgetrc" temporary-file-directory))
          (temp (make-temp-name prefix)))
     (with-temp-buffer
