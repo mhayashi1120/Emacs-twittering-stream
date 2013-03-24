@@ -3,7 +3,7 @@
 ;; Author: Masahiro Hayashi <mhayashi1120@gmail.com>
 ;; Keywords: twitter user stream
 ;; Emacs: GNU Emacs 22 or later
-;; Version: 0.0.2
+;; Version: 0.0.3
 ;; Package-Requires: ((json "1.2") (twittering-mode "2.0"))
 
 ;; This program is free software; you can redistribute it and/or
@@ -22,40 +22,82 @@
 ;; Boston, MA 02110-1301, USA.
 
 ;;; TODO:
-;; parameter
+
+;; check wget implementation is work.
 
 ;;; Usage:
 ;;
-;; M-x twittering-stream-mode 
+;; M-x twittering-visit-timeline :stream/user
 
 (require 'twittering-mode)
 (require 'json)
 
-(defconst twittering-stream-user-url "https://userstream.twitter.com/2/user.json")
+(defgroup twittering-stream ()
+  "twittering-mode extensions using Twitter Streaming API."
+  :group 'applications)
+
+(defconst twittering-stream-version "0.0.3")
+  
+(defconst twittering-stream-user-url "https://userstream.twitter.com/1.1/user.json")
 (defconst twittering-stream-buffer-name " *Twittering Stream* ")
 
-(defvar twittering-stream-mode nil)
-(defun twittering-stream-mode (&optional arg)
-  (interactive "P")
-  "Streaming API for Twitter"
+(defcustom twittering-stream-open-function 'twittering-stream--open-wget-filter
+  "Open twittering stream process function.
+This function must execute any process that work under `twittering-stream-buffer-name' buffer.
+"
+  :group 'twittering-stream
+  :type 'function)
+
+(defcustom twittering-stream-show-error-p nil
+  "Report error while retrieving JSON object from streaming API."
+  :group 'twittering-stream
+  :type 'boolean)
+
+(defcustom twittering-stream-timeout 300
+  "Number of seconds to timeout from streaming API.
+After the timeout, reconnect to stream immediately."
+  :group 'twittering-stream
+  :type 'integer)
+
+(defun twittering-stream-restart ()
+  "Force restart stream."
+  (interactive)
+  (twittering-stream-shutdown)
+  (twittering-stream-connect))
+
+(defun twittering-stream-shutdown ()
+  "Shutdown the active stream if exists."
+  (interactive)
+  (let ((proc (twittering-stream-active-process)))
+    (when proc
+      (process-put proc 'twittering-stream-suppress-reconnect t)
+      (twittering-stream-disconnect)
+      (message "Disconnected from twitter stream. (%s)"
+               (current-time-string)))))
+
+(defun twittering-stream-disconnect ()
+  (let ((proc (twittering-stream-active-process)))
+    (when proc
+      (delete-process proc))))
+
+(defun twittering-stream-active-process ()
   (let ((proc (get-buffer-process twittering-stream-buffer-name)))
-    (cond
-     ((or (and (numberp arg) (minusp arg))
-          (and (null arg)
-               twittering-stream-mode))
-      (when proc
-        (delete-process proc))
-      (setq twittering-stream-mode nil)
-      (message "Twittering stream disabled."))
-     (t
-      (unless (eq twittering-account-authorization 'authorized)
-        (twittering-stream-mode -1)
-        (error "Twittering-mode is not authorized"))
-      (unless proc
-        (twittering-stream--open 
-         twittering-stream-user-url))
-      (setq twittering-stream-mode t)
-      (message "Twittering stream enabled.")))))
+    (when (and proc
+               (memq (process-status proc) '(run open connect)))
+      proc)))
+
+(defun twittering-stream-connect ()
+  "Connect twitter streaming API"
+  (unless (eq twittering-account-authorization 'authorized)
+    (error "Twittering-mode is not authorized"))
+  (let ((buf (get-buffer-create twittering-stream-buffer-name)))
+    (when (buffer-live-p buf)
+      (with-current-buffer buf
+        (kill-all-local-variables)
+        (erase-buffer)))
+    (funcall twittering-stream-open-function buf)
+    (message "Connected to twitter stream. (%s)"
+             (current-time-string))))
 
 (defun twittering-stream--oauth-token (url)
   (let ((access-token
@@ -69,9 +111,82 @@
      twittering-oauth-consumer-key twittering-oauth-consumer-secret
      access-token access-token-secret)))
 
-;;TODO &optional arg
-(defun twittering-stream--open (uri)
-  (let* ((connection-info (twittering-make-connection-info '()))
+;;;
+;;; Extend twmode
+;;;
+
+(defadvice twittering-retrieve-timeline
+  (around twittering-retrieve-timeline-ad (spec-string &rest _ignore)
+          activate)
+  (setq ad-return-value
+        (or (twittering-stream-retrieve-timeline spec-string)
+            ad-do-it)))
+
+(defadvice twittering-get-managed-buffer
+  (around twittering-get-managed-buffer-ad (spec) activate)
+  (let ((buffer ad-do-it))
+    (twittering-stream-prepare-buffer-maybe spec buffer)
+    (setq ad-return-value buffer)))
+
+(defadvice twittering-timeline-spec-to-string
+  (around twittering-timeline-spec-to-string-ad
+          (timeline-spec &optional shorten) activate)
+  (setq ad-return-value 
+        (or (twittering-stream-timeline-spec-to-string timeline-spec)
+            ad-do-it)))
+
+(defadvice twittering-extract-timeline-spec
+  (around twittering-extract-timeline-spec-ad
+          (str &optional unresolved-aliases) activate)
+  (setq ad-return-value 
+        (or (twittering-stream-extract-timeline-spec str)
+            ad-do-it)))
+
+(defadvice twittering-timeline-spec-primary-p
+  (around twittering-timeline-spec-primary-p-ad (spec)
+          activate)
+  (setq ad-return-value
+        (or (twittering-stream-timeline-spec-primary-p spec)
+            ad-do-it)))
+
+(defun twittering-stream-retrieve-timeline (spec-string)
+  (let ((spec (twittering-stream-extract-timeline-spec spec-string)))
+    (when spec
+      (unless (twittering-stream-active-process)
+        (twittering-stream-connect))
+      t)))
+
+(defun twittering-stream-timeline-spec-primary-p (spec)
+  (eq (car-safe spec) 'stream))
+
+(defun twittering-stream-prepare-buffer-maybe (spec-or-string buffer)
+  (let ((spec (if (stringp spec-or-string)
+                  (car (twittering-stream-extract-timeline-spec spec-or-string))
+                spec-or-string)))
+    (when (eq (car-safe spec) 'stream)
+      (with-current-buffer buffer
+        (add-hook 'kill-buffer-hook 'twittering-stream-cleanup-buffer nil t)))))
+
+(defun twittering-stream-timeline-spec-to-string (timeline-spec)
+  (let ((type (car timeline-spec))
+             (value (cdr timeline-spec)))
+    (and (eq type 'stream)
+         (concat ":stream/" (mapconcat 'identity value "")))))
+
+(defun twittering-stream-extract-timeline-spec (str)
+  (and (string-match "^:stream/user" str)
+       `((stream "user") . "")))
+
+(defun twittering-stream-cleanup-buffer ()
+  (twittering-stream-shutdown))
+
+;;;
+;;; wget implementation
+;;;
+
+(defun twittering-stream--open-wget-filter (buffer)
+  (let* ((uri twittering-stream-user-url)
+         (connection-info (twittering-make-connection-info '()))
          (use-proxy (cdr (assq 'use-proxy connection-info)))
          (proxy-server (cdr (assq 'proxy-server connection-info)))
          (proxy-port (cdr (assq 'proxy-port connection-info)))
@@ -85,8 +200,6 @@
          (allow-insecure-server-cert
           (cdr (assq 'allow-insecure-server-cert connection-info)))
          (cacert-fullpath (cdr (assq 'cacert-fullpath connection-info)))
-         (cacert-dir (when cacert-fullpath
-                       (file-name-directory cacert-fullpath)))
          (cacert-filename (when cacert-fullpath
                             (file-name-nondirectory cacert-fullpath)))
          (args
@@ -94,35 +207,46 @@
             "--quiet"
             ,(format "--output-file=%s" null-device)
             "--output-document=-"
-            ,@(remove nil
-                      (mapcar
-                       (lambda (pair)
-                         (unless (string= (car pair) "Host")
-                           (format "--header=%s: %s" (car pair) (cdr pair))))
-                       (list
-                        (cons "Authorization" (twittering-stream--oauth-token uri)))))
+            ,(format "--read-timeout=%d" twittering-stream-timeout)
             ,@(when cacert-filename
                 `(,(format "--ca-certificate=%s" cacert-filename)))
             ,@(when allow-insecure-server-cert
                 `("--no-check-certificate"))
-            ,@(cond
-               ((not use-proxy)
+            ,@(unless use-proxy
                 '("--no-proxy"))
-               ((and use-proxy proxy-server proxy-port
-                     proxy-user proxy-password)
-                `(,(format "--proxy-user=%s" proxy-user)
-                  ,(format "--proxy-password=%s" proxy-password)))
-               (t
-                nil))
             ,uri))
+         (hidden-args
+          `(
+            ,@(when (and use-proxy proxy-server proxy-port
+                         proxy-user proxy-password)
+                `(,(cons "proxy_user" proxy-user)
+                  ,(cons "proxy_password" proxy-password)))
+            ,(cons "header"
+                   (format "%s: %s"
+                           "Authorization"
+                           (twittering-stream--oauth-token uri)))))
          (coding-system-for-read 'binary)
          (coding-system-for-write 'binary)
-         (buffer (get-buffer-create twittering-stream-buffer-name))
-         (command (twittering-find-wget-program))
-         (proc (apply 'start-process "Twittering stream" buffer command args))
-         )
-    (set-process-filter proc 'twittering-stream--wget-header-filter)))
+         (command (twittering-find-wget-program)))
+    (let ((process-environment (copy-sequence process-environment))
+          (wgetrc (twittering-stream--create-wgetrc hidden-args)))
+      (setenv "WGETRC" wgetrc)
+      (let ((proc (apply 'start-process "Twittering stream" buffer command args)))
+        (set-process-filter proc 'twittering-stream--wget-header-filter)
+        (set-process-sentinel proc 'twittering-stream--sentinel)))))
 
+(defun twittering-stream--create-wgetrc (alist)
+  ;;TODO do not consider about coding-system?
+  (let* ((prefix (expand-file-name "twmode-wgetrc" temporary-file-directory))
+         (temp (make-temp-name prefix)))
+    (with-temp-buffer
+      (dolist (pair alist)
+        (insert (format "%s = %s\n" (car pair) (cdr pair))))
+      (write-region (point-min) (point-max) temp nil 'no-msg))
+    (set-file-modes temp ?\400)
+    temp))
+
+;; Handle http header and switch filter itself to json filter.
 (defun twittering-stream--wget-header-filter (proc event)
   (let ((buf (process-buffer proc)))
     (when (buffer-live-p buf)
@@ -133,19 +257,14 @@
              ((= code 200)
               (let ((inhibit-read-only t))
                 (erase-buffer))
+              (process-put proc 'twittering-stream--error-count 0)
               ;; replace the filter
-              (set-process-filter proc 'twittering-stream--wget-filter)
-              (process-put proc 'twittering-stream--error-count 0))
+              (set-process-filter proc 'twittering-stream--json-filter))
              (t
               (message "Stream process exited abnormally with HTTP Code: %s" code)))))))))
 
-(defvar twittering-stream-handler-function 
-  'twittering-stream--default-handler)
-
-(defun twittering-stream--wget-filter (proc event)
-  (let ((buf (process-buffer proc))
-        (cbuf (current-buffer))
-        (mode major-mode))              ; current mode
+(defun twittering-stream--json-filter (proc event)
+  (let ((buf (process-buffer proc)))
     (when (buffer-live-p buf)
       (with-current-buffer buf
         (save-excursion
@@ -156,18 +275,13 @@
             (insert-before-markers event)
             (goto-char (point-min))
             (condition-case err
-                (while (setq json (json-read))
+                (while (setq json (twittering-stream-read-json))
                   (delete-region (point-min) (point))
                   (process-put proc 'twittering-stream--error-count 0)
-                  (when (or (not twittering-stream-suppress-message)
-                            (eq mode 'twittering-mode))
-                    (with-current-buffer cbuf
-                      (save-excursion
-                        (when (funcall twittering-stream-handler-function json)
-                          (ding))))))
-              ;; ignore eob
-              (end-of-file)
+                  (save-excursion
+                    (twittering-stream--twmode-handler json)))
               (error
+               (twittering-stream-show-error err event)
                (cond
                 ((> retry 5)
                  (erase-buffer))
@@ -176,108 +290,68 @@
                               'twittering-stream--error-count
                               (1+ retry))))))))))))
 
-(defconst twittering-stream--replace-table
-  '(
-    ("&gt;" . ">")
-    ("&lt;" . "<")
-    ("&quot;" . "\"")
-    ("&amp;" . "&")
+(defun twittering-stream-show-error (err event)
+  (when twittering-stream-show-error-p
+    (message "%s %s" err event)
+    (ding)))
+
+(defun twittering-stream-read-json ()
+  (condition-case err
+      (json-read)
+    ;; Read from end of buffer
+    (end-of-file nil)
+    ;; {"a":1
+    (wrong-type-argument nil)
+    ;; "\u6cc
+    (json-string-escape nil)
+    ;; DO NOT catch unexpected error.
     ))
 
-(defun twittering-stream--html2text (text)
-  (loop with tmp = text
-        for pair in twittering-stream--replace-table
-        do (setq tmp (replace-regexp-in-string (car pair) (cdr pair) tmp))
-        finally return tmp))
+(defun twittering-stream--sentinel (proc event)
+  (cond
+   ((null (twittering-stream-active-process)))
+   ((null (process-get proc 'twittering-stream-suppress-reconnect)))
+   (t
+    ;; retry twittering stream
+    (twittering-stream--reconnect 5))))
 
-;;TODO
-(defvar twittering-stream-suppress-message t)
+(defun twittering-stream--reconnect (count)
+  (condition-case err
+      (twittering-stream-connect)
+    (error
+     (message "Unable restart twittering stream: %s" err)
+     (when (> count 0)
+       (run-with-timer 1 nil 'twittering-stream--reconnect (1- count))))))
 
-(defun twittering-stream--default-handler (json)
-  (or
-   (twittering-stream--default-tweet-handler json)
-   (twittering-stream--default-event-handler json)))
+(defun twittering-stream--twmode-handler (json)
+  (case (twittering-stream--json-object-type json)
+    (status
+     (let* ((statuses (list (twittering-json-object-to-a-status json)))
+            (spec '(stream "user")))
+       (twittering-add-statuses-to-timeline-data statuses spec)))))
 
-(defun twittering-stream--default-event-handler (json)
-  (let* ((event (cdr (assq 'event json)))
-         (source (cdr (assq 'source json)))
-         (name (cdr (assq 'screen_name source))))
-    (and event name
-         (twittering-stream--message "[%s] Event: %s" name event))))
+;;FIXME: how to exactly match to json object type
+(defun twittering-stream--json-object-type (json)
+  (cond
+   ((and (assoc 'created_at json)
+         (assoc 'text json))
+    'status)
+   ((assoc 'delete json)
+    'delete)
+   ;;TODO
+   (t 'unknown)))
 
-(defun twittering-stream--default-tweet-handler (json)
-  (let* ((user (cdr (assq 'user json)))
-         (name (cdr (assq 'screen_name user)))
-         (text (cdr (assq 'text json))))
-    (and name text
-         (twittering-stream--message "[%s] %s" name text))))
-
-(defun twittering-stream--message (fmt &rest args)
-  (let* ((msg (apply 'format fmt args))
-         (truncated (twittering-stream-truncate msg))
-         message-log-max)
-    (message "%s" (twittering-stream--html2text truncated))
-    t))
-
-(defvar twittering-stream--popup-buffer " *Twittering Stream Popup* ")
-(defvar twittering-stream--popup-window-config nil)
-
-(defun twitteirng-stream--popup (buffer)
-  (let* ((alist (mapcar (lambda (w) (cons (window-buffer w) w)) (window-list)))
-         (win (or (cdr (assq buffer alist))
-                  (progn
-                    (setq twittering-stream--popup-window-config
-                          (current-window-configuration))
-                    (let ((w (split-window nil (- (window-height) 4))))
-                      (set-window-buffer w buffer)
-                      w)))))
-    (cancel-function-timers 'twittering-stream-popup-cleanup)
-    (let ((old-win (selected-window)))
-      (select-window win)
-      (goto-char (point-max))
-      (set-window-start win (line-beginning-position -1))
-      (select-window old-win))
-    (run-at-time 3 nil 'twittering-stream-popup-cleanup)))
-
-(defun twittering-stream-popup-cleanup ()
-  (when (window-configuration-p twittering-stream--popup-window-config)
-    (set-window-configuration twittering-stream--popup-window-config)
-    (setq twittering-stream--popup-window-config nil)))
-
-(defun twittering-stream-popup-handler (json)
-  (let* ((notify (twittering-stream-popup-single-line json))
-         (buffer (get-buffer-create twittering-stream--popup-buffer)))
-    (when (stringp notify)
-      (with-current-buffer buffer
-        (when (> (line-number-at-pos (point-max)) 
-                 (* twittering-stream-popup-max-threshold 2))
-          (goto-char (point-max))
-          (forward-line (- twittering-stream-popup-max-threshold))
-          (delete-region (point-min) (point)))
-        (goto-char (point-max))
-        (insert notify "\n"))
-      (twitteirng-stream--popup buffer)
-      t)))
-
-(defvar twittering-stream-popup-max-threshold 300)
-
-(defun twittering-stream-popup-single-line (json)
-  (or
-   (let* ((user (cdr (assq 'user json)))
-          (name (cdr (assq 'screen_name user)))
-          (text (cdr (assq 'text json))))
-     (and name text
-          (string-match (format "@%s\\b" twittering-username) text)
-          (twittering-stream-truncate (format "[%s] %s" name text))))
-   (let* ((event (cdr (assq 'event json)))
-          (source (cdr (assq 'source json)))
-          (name (cdr (assq 'screen_name (and (consp source) source)))))
-     (and event name
-          (format "[%s] Event: %s" name event)))))
-
-(defun twittering-stream-truncate (msg)
-  (truncate-string-to-width
-   msg (max 0 (- (frame-width) 10)) nil nil "..."))
+(defun twittering-stream-unload-function ()
+  (twittering-stream-shutdown)
+  ;;TODO check really unadviced
+  (ad-remove-advice 'twittering-timeline-spec-primary-p
+                    'around 'twittering-timeline-spec-primary-p-ad)
+  (ad-remove-advice 'twittering-get-managed-buffer
+                    'around 'twittering-get-managed-buffer-ad)
+  (ad-remove-advice 'twittering-extract-timeline-spec
+                    'around 'twittering-extract-timeline-spec-ad)
+  (ad-remove-advice 'twittering-timeline-spec-to-string
+                    'around 'twittering-timeline-spec-to-string-ad))
 
 (provide 'twittering-stream)
 

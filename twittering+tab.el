@@ -51,12 +51,12 @@
   "*Face used to highlight tabs under the mouse."
   :group 'faces)
 
-(defvar twittering+tab-map (make-sparse-keymap))
+(defvar twittering+tab-map nil)
 
-(when twittering+tab-map
-  (let ((map twittering+tab-map))
+(unless twittering+tab-map
+  (let ((map (make-sparse-keymap)))
     ;;TODO
-    ))
+    (setq twittering+tab-map map)))
 
 (defvar twittering+tab-mode nil)
 (defun twittering+tab-mode (&optional arg)
@@ -206,8 +206,13 @@ cleared by a timer.")
        (t
         (concat (truncate-string-to-width tab (- breadth 3) nil ?\ ) "...")))
       'mouse-face (list 'twittering+tab-mouse)
-      'local-map twittering+tab-map
+      'local-map (twittering+tab-make-map buffer)
       'help-echo tab))))
+
+(defun twittering+tab-make-map (buffer)
+  (let ((map (make-sparse-keymap)))
+    ;;TODO
+    map))
 
 (defun twittering+tab-groups (current bufs maxtabs)
   "(first-tab (normal-tabs) last-tab)"
