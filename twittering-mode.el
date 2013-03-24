@@ -9973,7 +9973,6 @@ been initialized yet."
   (make-local-variable 'twittering-icon-mode)
   (make-local-variable 'twittering-jojo-mode)
   (make-local-variable 'twittering-reverse-mode)
-  (make-local-variable 'twittering-scroll-mode)
 
   (setq twittering-timeline-spec-string spec-string)
   (setq twittering-timeline-spec
