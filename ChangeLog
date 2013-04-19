@@ -1,3 +1,63 @@
+2013-03-25  Tadashi MATSUO  <tad@mymail.twin.jp>
+
+	* twittering-mode.el: Decode surrogate pairs in strings returned
+	by `json-read'. A new advice is added for decoding surrogate
+	pairs.
+	A character not in the Basic Multilingual Plane is
+	represented by a surrogate pair in JSON (RFC4627). This is similar
+	to CESU-8. But the function `json-read' in `json.el' does not
+	correctly decode surrogate pairs. `json-read' returns a string
+	including invalid code points from U+D800 to U+DFFF.
+	`twittering-json-read' now decodes them by using a new advice.
+	Thanks to multiSnow who reported the problem.
+	(twittering-surrogate-pair-regexp): new constant that matches a
+	surrogate pair in CESU-8.
+	(twittering-decode-surrogate-pairs-as-cesu-8): new function that
+	decodes surrogate pairs in a given string similarly to CESU-8.
+	(json-read-string): new advice for decoding surrogate pairs.
+	(twittering-json-read): use the new advice for decoding surrogate
+	pairs in strings returned by `json-read'.
+
+	* twittering-mode.el: Add `twittering-assoc-string' for
+	portability. In Emacs 21, the function `assoc-string' is not
+	defined. In such case, the reimplemented version is
+	used. Othewise, `twittering-assoc-string' is an alias of
+	`assoc-string'.
+	(twittering-assoc-string): new function for portability.
+	(twittering-get-server-info): replace `assoc-string' with
+	`twittering-assoc-string'.
+
+	* twittering-mode.el: Display rate-limit information for each API.
+	(twittering-api-limit-info-alist): new variable for storing
+	rate-limit information for each API.
+	(twittering-timeline-spec-to-api-table): new variable for storing
+	combination of timeline spec and an API for retrieving the
+	timeline.
+	(twittering-update-api-table): new function for registering a
+	timeline spec and an API with the new variable
+	`twittering-timeline-spec-to-api-table'.
+	(twittering-make-rate-limit-alist): new function.
+	(twittering-update-rate-limit-info): new function for updating the
+	new variables `twittering-api-limit-info-alist' and
+	`twittering-timeline-spec-to-api-table'.
+	(twittering-update-server-info): update rate-limit information
+	with new function.
+	(twittering-get-server-info): removed.
+	(twittering-get-ratelimit-alist): new function.
+	(twittering-get-ratelimit-remaining): use the new function
+	`twittering-get-ratelimit-alist'.
+	(twittering-get-ratelimit-limit): likewise.
+	(twittering-get-ratelimit-indicator-string): new function for
+	making an indicator string of rate-limit information.
+	(twittering-mode-line-buffer-identification): make an indicator
+	string of rate-limit information by the new function
+	`twittering-get-ratelimit-indicator-string'.
+
+	* twittering-mode.el: Replace `delete-dups' with
+	`twittering-remove-duplicates' for portability.
+	(twittering-update-active-buffers): replace `delete-dups' with
+	`twittering-remove-duplicates' for portability.
+
 2013-03-05  Tadashi MATSUO  <tad@mymail.twin.jp>
 
 	* twittering-mode.el: Bind a local variable correctly.
