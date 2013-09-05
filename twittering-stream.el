@@ -3,7 +3,7 @@
 ;; Author: Masahiro Hayashi <mhayashi1120@gmail.com>
 ;; Keywords: twitter user stream
 ;; Emacs: GNU Emacs 22 or later
-;; Version: 0.0.3
+;; Version: 0.0.4
 ;; Package-Requires: ((json "1.2") (twittering-mode "2.0"))
 
 ;; This program is free software; you can redistribute it and/or
@@ -45,7 +45,7 @@
   :prefix "twittering-"
   :group 'applications)
 
-(defconst twittering-stream-version "0.0.3")
+(defconst twittering-stream-version "0.0.4")
   
 (defconst twittering-stream-user-url "https://userstream.twitter.com/1.1/user.json")
 (defconst twittering-stream-buffer-name " *Twittering Stream* ")
@@ -230,13 +230,12 @@ After the timeout, reconnect to stream immediately."
          (spec (car-safe tlspec)))
     (cond
      ((null spec) nil)
-     ((eq (car-safe spec) 'stream)
+     ((not (eq (car-safe spec) 'stream)) nil)
+     ((twittering-stream-active-process spec) t)
+     (t
       ;;TODO exclusive lock!
-      (cond
-       ((not (twittering-stream-active-process spec))
-        (twittering-stream-connect spec)))
-      t)
-     (t nil))))
+      (twittering-stream-connect spec)
+      t))))
 
 (defun twittering-stream-timeline-spec-primary-p (spec)
   (eq (car-safe spec) 'stream))
@@ -300,7 +299,6 @@ After the timeout, reconnect to stream immediately."
 
 (defun twittering-stream--retrieve-http-header (proc)
   (when (re-search-forward "^HTTP/\\(?:[0-9.]+\\)[ \t]+\\([0-9]+\\)" nil t)
-    (setq hogehoge (buffer-string))
     (let ((code (string-to-number (match-string 1))))
       (cond
        ((= code 200)
@@ -428,12 +426,16 @@ After the timeout, reconnect to stream immediately."
 ;;; Emacs network interface
 ;;;
 
+(defun twittering-stream--userstream-by-network (buffer)
+  (twittering-stream--open-by-network
+   buffer "POST" twittering-stream-user-url))
+
 (defun twittering-stream--network-header-filter (proc event)
   (twittering-stream--filter proc event
     (twittering-stream--retrieve-http-header proc)))
 
 ;;TODO
-(defun twittering-stream--open-by-network (method uri)
+(defun twittering-stream--open-by-network (buffer method uri)
   (require 'tls)
   (let* ((urlobj (url-generic-parse-url uri))
          (host (url-host urlobj))
@@ -447,9 +449,8 @@ After the timeout, reconnect to stream immediately."
          ;; dynamic bind
          (tls-checktrust twittering-stream-tls-checktrust))
     (let ((proc (open-network-stream
-                 "TODO" "*scratch*" host port
-                 :type 'ssl
-                 )))
+                 "Twittering stream" buffer host port
+                 :type 'ssl)))
 
       (unless proc
         (error "Process is not running"))
