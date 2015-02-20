@@ -3,10 +3,10 @@
 ;; Author: Masahiro Hayashi <mhayashi1120@gmail.com>
 ;; Keywords: twitter user stream
 ;; Emacs: GNU Emacs 22 or later
-;; Version: 0.0.5
+;; Version: 0.0.6
 ;; Package-Requires: ((json "1.2") (twittering-mode "2.0"))
 
-(defconst twittering-stream-version "0.0.5")
+(defconst twittering-stream-version "0.0.6")
   
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -23,6 +23,12 @@
 ;; Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 ;; Boston, MA 02110-1301, USA.
 
+;;; Commentary:
+
+;; ## Usage:
+;;
+;;     M-x twittering-visit-timeline :stream/user
+
 ;;; TODO:
 
 ;; * mode-line `wget' string
@@ -35,9 +41,7 @@
 
 ;; * keep userstream wheather or not buffer is opening.
 
-;;; Usage:
-;;
-;; M-x twittering-visit-timeline :stream/user
+;;; Code:
 
 (require 'twittering-mode)
 (require 'json)
