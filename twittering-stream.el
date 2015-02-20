@@ -30,7 +30,8 @@
 ;; * filter stream
 ;;   :stream/filter/some-id
 ;;   - each timeline has tracks and follows some of local var or alist of global
-;;   - timer watch above config var and restart if need. (start proc -> stop current) `twittering-stream-resume'
+;;   - timer watch above config var and restart if need.
+;;     (start proc -> stop current) `twittering-stream-resume'
 
 ;; * keep userstream wheather or not buffer is opening.
 
